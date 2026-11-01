@@ -1,0 +1,114 @@
+GeoForma 架构与实现范围
+===========================
+
+依赖方向
+main.py -> window.py -> controllers / ui/panels / dialogs.py / viewport.py / tool_icons.py
+window -> workflow.PreparationQueue / 全图准备签名与容量策略
+window -> services.ModelService（IPC 客户端） -> spawn 子进程 inference.engine.ModelEngine -> backend_factory
+backend_factory -> backend.SamBackend / sam2_backend.Sam2Backend / sam3_backend.Sam3Backend
+window -> raster / storage / exports；自动保存、项目加载与影像 IO 使用独立后台队列。
+backend -> 官方 segment_anything / sam2 / PyTorch；raster -> Rasterio；exports -> Rasterio / Shapely / OGR。
+domain 提供项目默认结构、窗口规则与摘要；tasks 提供进度、取消和结果事件。
+第三方 SAM 核心没有修改。SAM 2 不复用 SAM 1 的缓存对象或接口假设。
+
+数据流程
+TIF/VRT -> 来源及网格验证 -> 通道/拉伸配方 -> 固定窗口 RGB uint8 -> SAM 编码 -> 特征磁盘缓存
+屏幕提示 -> 原始栅格连续像元坐标 -> 窗口局部坐标 -> 官方 SAM 坐标缩放 -> 掩膜
+掩膜 -> 原始像元多边形 -> 当前草稿 -> 用户确认 -> 独立标签 -> 项目 / GPKG / SHP / GeoJSON
+原始网格标签 TIFF 仍保留为程序接口，桌面导出仅显示矢量标签。
+VRT -> image_list 展开独立 TIF、去重并保留来源 -> 同一影像导入流程，不显示整幅 VRT。
+参考影像 -> 同名匹配 -> 主影像网格裁剪与重投影显示；不参与模型输入。
+官方 AMG -> 分块候选 -> 重叠去重与触边标记 -> 用户选择 -> 审阅类别 -> 用户确认。
+
+关键数据契约（实际通过可序列化字典与 NumPy 数组传递）
+Image: id, path, width, height, bands, dtypes, crs, assigned_crs, transform[6],
+       fingerprint, model_recipe, display_recipe, ready, prepared_bounds,
+       prepared_full_signature, preparation_state, preparation_progress,
+       working_draft, mode_sessions, candidate_runs, dismissed_candidates, source_paths。
+项目 references 保存显示参考类型、路径与显示配方；计算影像与参考共用来源目录和路径迁移规则。
+Recipe: bands[3]（GDAL 1-based）, ranges[3][low,high], RGB uint8, nodata_fill=0。
+Prompt: points[N][x,y,0/1], box[xmin,ymin,xmax,ymax], window[x,y,width,height]。
+Prediction: choices[{geometry,score,logits[1,256,256],edge,pixels}], window, cache_hit, device。
+Label: id, image_id, status(candidate/confirmed), class_id(None/1..65534), geometry,
+       source, points, box, window, model, confirmed_at。
+geometry 是原始全幅影像的像元边缘坐标，不是地理坐标。项目中的 ID 不跨标签复用。
+草稿 base_id 指向待替换标签；确认才替换，取消不修改原标签。
+两种模式分别保存草稿、提示与标签；全图候选点击进入审阅，确认后保持同一 ID，按空间顺序继续。
+准备队列是独立状态，不依赖视图窗口。导入后默认全图准备，不存在当前视图准备选项。
+波段未知、磁盘不足、取消或失败会暂停，完整缓存块保留并可继续。
+每幅影像的 mode_sessions 保存各模式草稿、视图、prompt undo/redo；项目 history.labels 保存各模式的标签 undo/redo。
+内存会话与项目、自动保存保持同一历史契约，重开后可继续撤销与重做；详见 HISTORY.txt。
+删除候选记入 dismissed_candidates，重复生成只合入新 ID，不恢复用户已删除或已保存的标签。
+
+坐标
+QGraphicsScene 以原生像元为单位，左上角为 (0,0)，首像元中心 (0.5,0.5)。
+QGraphicsView 变换负责屏幕->scene；窗口局部点减去窗口原点。
+适配器转到 SAM 像元中心索引时再减 0.5，官方 predictor 负责输入尺度及 padding。
+掩膜 polygonize 使用像元边缘；地图坐标使用完整仿射六参数，支持旋转/剪切。
+GPKG 坐标恢复与可选重投影；TIFF 在原生像元坐标中分块栅格化后写原始 transform。
+显示缩放、显示 RGB 配方与模型 RGB 配方独立；不把全图概览送入 SAM。
+
+缓存与分块
+固定核心 768，四周 halo 128，编码窗口 1024。边缘越界以无效背景填充。
+缓存 key 包含：源文件及 VRT 引用 stat 摘要、原始网格、窗口、RGB 配方、模型权重 SHA256、
+模型 variant、适配器 schema。原图 stat 摘要不是全文件内容哈希，不能识别刻意保留时间戳的篡改。
+特征 payload 记录 key、窗口/配方/来源元数据、features、original_size、input_size。
+旧的试运行缓存可能只有 key 和尺寸；重新生成时会带完整元数据。
+单块临时文件完成后原子替换；中断留下的 .tmp 不视为成功缓存。逐块恢复而非全量载入。
+导入后完整栅格按固定块编码；自定义提示窗口仍允许按需编码，不拼接不同块的特征。
+全图准备签名检查来源、网格、配方、后端/模型、权重文件路径/尺寸/时间；
+实际单块特征仍以 SHA256 和适配器 schema 判定缓存。整图准备先检查剩余磁盘容量。
+缓存命中只读取验证特征，不再重复读取/编码源块。旧 payload 元数据缺失时重新编码。
+扩大窗口需要额外编码，并通过“扩大范围”提示可能降低细节尺度。
+框或累计提示越界时生成能覆盖提示的新窗口；超过 8192 像元明确拒绝并要求拆分。
+不拼接 embedding，不宣称自动解决跨块大目标。候选跨块 IoU>=0.7 时去重；
+未合并片段标记触边，由用户扩大窗口复核。全局跨块连通与尺度选择需要额外算法验证。
+
+任务与故障隔离
+Qt 主线程处理 UI、轻量状态和首次选择项目位置；后续编辑经短暂防抖后在独立串行 IO 线程自动写回正式文件及恢复副本。
+保存按钮只在项目未命名时可用；ProjectSaveQueue 合并同一上下文的待写快照，跨项目保留请求，并以逻辑提交顺序防止旧快照覆盖新状态。
+保存结果仅清理相同项目世代/编辑版本的 dirty 状态，避免把保存期间的新编辑判为已保存。
+栅格显示使用独立串行 IO 线程，150 ms 防抖。
+候选重叠分层使用独立线程；原始标签不改写。当前影像和模式的全部标签预先缓存轮廓，
+包括视窗之外的标签；图元与精确 QPainterPath 复用，由 Qt 裁剪屏幕外绘制。
+平滑是显式选项，保留原始几何，不因缩放而改变标签内容。
+显示结果携带 generation，切影像或配方后丢弃旧结果；低分辨率预览与视窗细节分开。
+应用任务使用串行 QThreadPool；模型任务在该线程中等待 IPC，不在 Qt 线程内运行 PyTorch。
+本机 Python 3.13 + Qt 工作线程内 PyTorch 曾触发 _PyThreadState_Attach 崩溃，故采用 spawn。
+模型进程只在它的主 Python 线程推理，长期持有模型；管道传 dict/NumPy，不传 QObject/GPU 张量。
+模型崩溃或 IPC 中断后清理进程，下一任务可重新启动；已保存标签不受影响。
+取消通过共享 Event，块间/推理前后检查；不抢占正在执行的 GPU kernel。
+预处理取消保留完整缓存；自动候选取消可返回已完成部分。导出先写临时文件，完成后替换。
+退出等待任务安全结束，关闭子进程。没有并发 GPU 队列/抢占式优先级；用户取消批处理后可交互。
+原始影像缺失、VRT 引用缺失、源变化或模型权重不匹配会显示错误，不自动套用旧结果。
+
+官方已有能力 / 工程封装 / 额外研究
+官方：完整 SAM 模型、点框+mask_input预测、图像 embedding 提取、AMG 类别无关候选。
+工程封装：磁盘 embedding 恢复（适配器内部字段，并非官方 public restore API）、
+GIS窗口与坐标、分块、原子缓存、项目状态、候选审阅、标签导出、进程隔离。
+几何候选转 +/-4 二值先验再插值到 256 是工程启发式，不等同于原始 SAM logits。
+交互端分离待应用提示与上次结果。手动应用或启用自动应用后才执行模型更新。
+人工重塑保留独立几何历史，完成后清除编辑线，不隐式保存标签或强行切换工具。
+每次应用以当前完整提示集重新预测，不复用受已删除提示影响的旧 logits。
+备选轮廓默认按显式正负点的未满足数量升序、模型分数降序选择；所有备选仍可切换。
+该规则是工程启发式，不是额外训练、类别识别或精度保证；没有满足全部点时明确显示。
+编辑既有标签时仅将编辑起点的固定几何作为先验，不将上一次修正结果累积成隐式提示。
+提示历史保存点/框/窗口/ignore_seed。重新分割按钮忽略原先验、保留点框并立即执行。
+标签批量删除以一个操作记录并恢复原始顺序；保存与删除都可撤销/重做。
+研究项：湖泊语义识别、极小湖召回、阴影/冰雪判别、跨块全局融合、多尺度最优提示。
+
+公共生命周期与写入边界
+progress.ProgressModel 负责任务名称、阶段、数值、取消请求与终态。
+ui/progress_bar.TaskProgressBar 是唯一进度条绘制实现，启动、工作台和退出共用。
+ui/task_progress 是工作台适配器；后台显示、索引、平滑和自动保存通过 background_activity 独立汇总。
+operation_state 统一加载、恢复与关闭期间的交互入口，tool_state 统一按钮和快捷键的工具可用性。
+source_catalog 统一计算影像、参考、VRT 引用链与导入来源的写入保护及项目相对路径。
+storage 的快照冻结可变记录；自动保存文件时间使用采集时刻，避免晚完成的旧快照覆盖恢复顺序。
+atomic_io 统一原子替换和 Windows 短时共享锁重试；SHP 文件组保留独立事务与回滚。
+
+Windows 部署
+开发版使用 Conda-forge Qt/GDAL 栈与官方 PyTorch，运行不需要 QGIS。
+SAM 1、SAM 2、SAM 2.1 和 SAM 3 使用 Windows 原生适配器。
+权重、用户项目和缓存与程序分离；CUDA 需要兼容 NVIDIA 驱动，不要求安装开发工具链。
+发行结构和验证记录见 DEPLOYMENT.txt；2026-10-23 审计未重新制作或安装发行包。
+源码重启后应用本轮修改，当前审计证据见 MODULAR_AUDIT_2026_10_23.txt。

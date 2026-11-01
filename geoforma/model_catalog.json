@@ -1,0 +1,226 @@
+{
+  "sam2_commit": "2b90b9f5ceec907a1c18123530e92e794ad901a4",
+  "sam3_commit": "0570b3a5be9c4e694f23d85232fb55f4a6f1f7fc",
+  "models": [
+    {
+      "id": "sam1_vit_b",
+      "backend": "sam",
+      "variant": "vit_b",
+      "title": "SAM 1 · B",
+      "file": "sam_vit_b_01ec64.pth",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
+      "sha256": "ec2df62732614e57411cdcf32a23ffdf28910380d03139ee0f4fcbe91eb8c912",
+      "bytes": 375042383,
+      "config": null,
+      "memory_profile": {
+        "interaction_peak_mib": 2779.7,
+        "automatic_peak_mib": 2772.2,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam1_vit_l",
+      "backend": "sam",
+      "variant": "vit_l",
+      "title": "SAM 1 · L",
+      "file": "sam_vit_l_0b3195.pth",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth",
+      "sha256": "3adcc4315b642a4d2101128f611684e8734c41232a17c648ed1693702a49a622",
+      "bytes": 1249524607,
+      "config": null,
+      "memory_profile": {
+        "interaction_peak_mib": 4410.6,
+        "automatic_peak_mib": 4402.6,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam1_vit_h",
+      "backend": "sam",
+      "variant": "vit_h",
+      "title": "SAM 1 · H",
+      "file": "sam_vit_h_4b8939.pth",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth",
+      "sha256": "a7bf3b02f3ebf1267aba913ff637d9a2d5c33d3173bb679e46d9f338c26f262e",
+      "bytes": 2564550879,
+      "config": null,
+      "memory_profile": {
+        "interaction_peak_mib": 5748.2,
+        "automatic_peak_mib": 5740.2,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2_tiny",
+      "backend": "sam2",
+      "variant": "tiny",
+      "title": "SAM 2 · Tiny",
+      "file": "sam2_hiera_tiny.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_tiny.pt",
+      "sha256": "65b50056e05bcb13694174f51bb6da89c894b57b75ccdf0ba6352c597c5d1125",
+      "bytes": 155906050,
+      "config": "configs/sam2/sam2_hiera_t.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 862.1,
+        "automatic_peak_mib": 838.9,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2_small",
+      "backend": "sam2",
+      "variant": "small",
+      "title": "SAM 2 · Small",
+      "file": "sam2_hiera_small.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_small.pt",
+      "sha256": "95949964d4e548409021d47b22712d5f1abf2564cc0c3c765ba599a24ac7dce3",
+      "bytes": 184309650,
+      "config": "configs/sam2/sam2_hiera_s.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 888.7,
+        "automatic_peak_mib": 869.0,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2_base_plus",
+      "backend": "sam2",
+      "variant": "base_plus",
+      "title": "SAM 2 · Base+",
+      "file": "sam2_hiera_base_plus.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_base_plus.pt",
+      "sha256": "d0bb7f236400a49669ffdd1be617959a8b1d1065081789d7bbff88eded3a8071",
+      "bytes": 323493298,
+      "config": "configs/sam2/sam2_hiera_b+.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 1023.9,
+        "automatic_peak_mib": 1005.9,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2_large",
+      "backend": "sam2",
+      "variant": "large",
+      "title": "SAM 2 · Large",
+      "file": "sam2_hiera_large.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_large.pt",
+      "sha256": "7442e4e9b732a508f80e141e7c2913437a3610ee0c77381a66658c3a445df87b",
+      "bytes": 897952466,
+      "config": "configs/sam2/sam2_hiera_l.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 1575.8,
+        "automatic_peak_mib": 1555.3,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2.1_tiny",
+      "backend": "sam2.1",
+      "variant": "tiny",
+      "title": "SAM 2.1 · Tiny",
+      "file": "sam2.1_hiera_tiny.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_tiny.pt",
+      "sha256": "7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69",
+      "bytes": 156008466,
+      "config": "configs/sam2.1/sam2.1_hiera_t.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 862.4,
+        "automatic_peak_mib": 839.9,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2.1_small",
+      "backend": "sam2.1",
+      "variant": "small",
+      "title": "SAM 2.1 · Small",
+      "file": "sam2.1_hiera_small.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_small.pt",
+      "sha256": "6d1aa6f30de5c92224f8172114de081d104bbd23dd9dc5c58996f0cad5dc4d38",
+      "bytes": 184416285,
+      "config": "configs/sam2.1/sam2.1_hiera_s.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 889.0,
+        "automatic_peak_mib": 869.5,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2.1_base_plus",
+      "backend": "sam2.1",
+      "variant": "base_plus",
+      "title": "SAM 2.1 · Base+",
+      "file": "sam2.1_hiera_base_plus.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_base_plus.pt",
+      "sha256": "a2345aede8715ab1d5d31b4a509fb160c5a4af1970f199d9054ccfb746c004c5",
+      "bytes": 323606802,
+      "config": "configs/sam2.1/sam2.1_hiera_b+.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 1024.5,
+        "automatic_peak_mib": 1008.7,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam2.1_large",
+      "backend": "sam2.1",
+      "variant": "large",
+      "title": "SAM 2.1 · Large",
+      "file": "sam2.1_hiera_large.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt",
+      "sha256": "2647878d5dfa5098f2f8649825738a9345572bae2d4350a2468587ece47dd318",
+      "bytes": 898083611,
+      "config": "configs/sam2.1/sam2.1_hiera_l.yaml",
+      "memory_profile": {
+        "interaction_peak_mib": 1575.6,
+        "automatic_peak_mib": 1555.6,
+        "measurement": "RTX 4060 Ti / FP32 / 1024 input / AMG batch 32, grid 8",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    },
+    {
+      "id": "sam3_interactive",
+      "backend": "sam3",
+      "variant": "interactive",
+      "title": "SAM 3",
+      "file": "sam3.pt",
+      "url": "https://huggingface.co/1038lab/sam3/resolve/main/sam3.pt",
+      "source": "1038lab/sam3 镜像",
+      "sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e",
+      "bytes": 3450062241,
+      "config": null,
+      "runtimes": [
+        "native"
+      ],
+      "memory_profile": {
+        "interaction_peak_mib": 8192,
+        "automatic_peak_mib": 8192,
+        "measurement": "Conservative estimate; interactive FP32, 1008 input",
+        "budget_margin": 1.25,
+        "budget_extra_mib": 512
+      }
+    }
+  ]
+}

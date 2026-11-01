@@ -1,0 +1,32 @@
+# Windows x64 / Python 3.13. Install conda-win-64.lock.txt first.
+--index-url https://pypi.org/simple
+altgraph==0.17.5
+antlr4-python3-runtime==4.9.3
+charset-normalizer==3.4.4
+colorama==0.4.6
+filelock==3.32.3
+fsspec==2026.7.0
+hydra-core==1.3.7
+iniconfig==2.3.1
+iopath==0.1.10
+jinja2==3.1.6
+markupsafe==3.0.3
+mpmath==1.3.0
+networkx==3.6.1
+omegaconf==2.3.1
+pefile==2024.8.26
+pluggy==1.6.0
+portalocker==4.4.0
+pygments==2.21.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8
+pytest==9.1.1
+pywin32-ctypes==0.2.3
+pyyaml==6.0.3
+SAM-2 @ https://github.com/facebookresearch/sam2/archive/2b90b9f5ceec907a1c18123530e92e794ad901a4.zip#sha256=fe93082a71a885a427894b1eab76341768781b6b58a298a0717e03862097d137
+segment-anything @ https://github.com/facebookresearch/segment-anything/archive/dca509fe793f601edb92606367a655c15ac00fdf.zip#sha256=775a9fa2ea5441a7f532c77a9a193fec21764ef59e008bbdd595fee84e3aaab6
+sympy==1.14.0
+torch @ https://download.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp313-cp313-win_amd64.whl#sha256=4d1b0b49c54223c7c04050b49eac141d77b6edbc34aea1dfc74a6fdb661baa8c
+torchvision @ https://download.pytorch.org/whl/cu128/torchvision-0.25.0%2Bcu128-cp313-cp313-win_amd64.whl#sha256=e2e0317e3861bba1b5aeba7c1cb4bcd50937cf0bffdbea478619d1f5f73e9050
+tqdm==4.70.1
+typing-extensions==4.16.0

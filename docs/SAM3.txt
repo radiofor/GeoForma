@@ -1,0 +1,24 @@
+SAM 3
+=====
+
+模型选择中的 SAM 3 使用 Meta 官方交互式图像代码，支持正点、负点、框选及已有轮廓的调整。
+模型代码：https://github.com/facebookresearch/sam3
+固定源码版本：0570b3a5be9c4e694f23d85232fb55f4a6f1f7fc
+
+权重只从指定镜像下载，不调用官方权重仓库，也不需要 Hugging Face 登录。
+下载页面：https://huggingface.co/1038lab/sam3/tree/main
+文件：sam3.pt（3,450,062,241 字节）
+SHA256：9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e
+资源配置支持自动下载、断点续传和本地导入。模型加载失败可点击“重试”。
+
+源码运行首次配置：使用 GeoForma 的 Python 执行 environment/prepare_sam3.py。
+官方代码及额外依赖放在 environment/sam3-runtime，与现有 SAM 1/2 依赖分开。
+打包时随附该目录；不修改官方模型实现，也不替换现有 Torch。
+运行源码中仅将 video_tracking_multiplex.py 的 timm.models.layers 导入改为 timm.layers，
+以使用当前 timm 接口。官方原始源码保留在 environment/sam_sources；准备脚本会校验
+原始文件及运行文件，并在 official-source.json 记录兼容修改和各自的校验值。
+
+SAM 3 使用官方 1008 输入和独立的多尺度特征缓存，与 SAM 1/2 缓存互不混用。
+按官方实现使用 BF16 自动混合精度，磁盘特征统一保存为 FP32；不支持 BF16 的 GPU 回退 CPU。
+先为当前影像和下一幅影像准备特征，再用正负点或框逐个标注目标。
+全图分割功能已移除。

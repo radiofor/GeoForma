@@ -1,0 +1,25 @@
+GeoForma Microsoft Store 渠道
+============================
+
+身份来源：用户在 Partner Center 的产品标识页面提供的数据。
+配置：packaging/store-profile.json。修改 Publisher 时必须同时核对包族名，不能自行编造。
+应用版本源：geoforma/distribution.py；商店包追加第四段 0，例如 1.0.0 -> 1.0.0.0。
+
+构建示例：
+设置 GEOFORMA_BUILD_CHANNEL=store。
+python tools/build_release.py --optional-runtime --output-dir build/store-staging
+python tools/build_msix.py --bundle build/store-staging/portable/GeoForma
+推理运行库与模型权重在软件内按需配置。各版本发布包独立存放，不覆盖旧版本。
+
+Store profile 仅作为商店冻结数据加入 _internal/geoforma；设置环境变量不会把源码变成商店渠道。
+package_context.py 读取实际 Windows 包身份，并避免覆盖系统分配的 AUMID。
+商店渠道和普通安装包均使用 Windows 原生推理。
+msix_package.py 定义身份、版本、XML 和映射规则；build_msix.py 使用 Windows SDK MakeAppx 完整语义验证。
+没有使用 /nv 跳过校验，不改变真实 Publisher 来绕过本机签名要求。
+商店上传的 MSIX 保持无本地签名，由微软发布时签名；本机构建验证不等于商店认证。
+
+官方依据：
+https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-manual-conversion
+https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-prepare
+https://learn.microsoft.com/windows/msix/package/create-app-package-with-makeappx-tool
+https://learn.microsoft.com/windows/msix/package/sign-msix-package-guide

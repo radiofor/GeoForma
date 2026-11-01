@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.idea/
+build/
+release/
+experiments/
+models/
+environment/sam_sources/
+environment/sam3-runtime/
+environment/resource-wheels/
+environment/security-runtime/
+environment/build-tools/
+*.geoforma.json
+*.autosave
+*.bak
