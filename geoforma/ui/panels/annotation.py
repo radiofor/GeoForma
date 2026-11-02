@@ -107,7 +107,9 @@ def build_reshape(w,layout):
 
 def build_label_list(w,layout):
     from ..label_summary import LabelSummary
-    w.label_count=LabelSummary();w.label_filter=w.label_count;w.label_filter.currentIndexChanged.connect(w.refresh_labels);layout.addWidget(w.label_count)
+    # Keep the internal filter for legacy project handling, without displaying
+    # the obsolete saved/candidate counters in the annotation panel.
+    w.label_count=LabelSummary();w.label_filter=w.label_count;w.label_filter.currentIndexChanged.connect(w.refresh_labels)
     from ..label_table import LabelTable
     w.labels_table=LabelTable()
     w.labels_table.setHorizontalHeaderLabels(['序号',ui_text('annotation.build_label_list.050'),ui_text('annotation.build_label_list.051')])
