@@ -248,5 +248,17 @@ def _execute(record,task):
             raise ValueError('源文件已改变，保留文件：'+item['path'])
         src.unlink()
     if entries:_progress(task,'清理已迁移资源',len(entries),len(entries))
+    # Remove only empty ancestors of verified migrated files. Unknown files,
+    # locks, and the resource root remain untouched.
+    directories=set()
+    for item in entries:
+        parent=_safe(source,item['path']).parent
+        while parent!=source:
+            directories.add(parent);parent=parent.parent
+    for directory in sorted(directories,key=lambda p:len(p.parts),reverse=True):
+        if directory.is_symlink() or directory.is_junction():continue
+        try:directory.rmdir()
+        except OSError:
+            if directory.exists() and not directory.is_dir():raise
     journal.unlink()
     return {'source':str(source),'destination':str(target)}

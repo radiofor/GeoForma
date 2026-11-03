@@ -34,6 +34,7 @@ def test_migration_moves_verified_managed_files_and_keeps_unknown(tmp_path,monke
         assert require_resource_dir()==target and result['destination']==str(target)
     assert (target/'cache/features'/feature.name).read_bytes()==b'feature'
     assert not feature.exists() and unknown.read_text()=='keep' and pending_migration() is None
+    assert not (root/'cache/features').exists()
 
 
 def test_interrupted_copy_resumes_without_losing_source(tmp_path,monkeypatch):
