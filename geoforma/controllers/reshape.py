@@ -3,7 +3,7 @@ import copy
 from shapely.geometry import shape,Point,LineString
 from shapely.ops import nearest_points
 from ..editing_state import manual_label,label_draft,stage_manual_edit
-from ..model_requests import model_image
+from ..raster_snapshot import image_snapshot
 from ..ui.text import ui_text
 
 
@@ -28,7 +28,7 @@ class ReshapeWorkflow:
             self.prompt_revision+=1;self.auto_apply_timer.stop();self.invalidate_preview()
             self.view.clear_reshape();self.activate_tool('reshape')
             self.refresh_labels();self.update_controls();self.view.setFocus();return
-        label=self.editable_label(self.selected_label())
+        label=self.selected_label()
         draft_target=bool(self.draft.get('geometry'))
         if draft_target:
             if self.draft.get('pending'):return
@@ -100,7 +100,7 @@ class ReshapeWorkflow:
         from ..reshape import reshape_raster
         label=session['label'];context=self.annotation_context();stroke=copy.deepcopy(session['stroke']);alternate=session['alternate']
         blockers=[copy.deepcopy(l['geometry']) for l in self.current_labels() if l['id']!=label['id'] and l['status']=='confirmed']
-        image=model_image(self.image);single=self.mode_index==0 and self.single_polygon.isChecked()
+        image=image_snapshot(self.image);single=self.mode_index==0 and self.single_polygon.isChecked()
         result_task=[None]
         self.view.reshape_enabled=False;session['preview']=None;session.pop('error',None)
         def work(task):return reshape_raster(image,label['geometry'],stroke,blockers,None,single,label.get('points') or [],alternate,task)
@@ -129,7 +129,7 @@ class ReshapeWorkflow:
         # labels participate, using their canonical source geometry.
         for label in self.presentation_labels():
             if label['id']!=base and line.intersects(shape(label['geometry']).boundary):
-                targets.append(('label',copy.deepcopy(self.editable_label(label))))
+                targets.append(('label',copy.deepcopy(label)))
         if self.draft.get('geometry') and line.intersects(shape(self.draft['geometry']).boundary):
             targets.append(('draft',{**copy.deepcopy(self.draft),'id':base or '__draft','image_id':self.image['id'],'status':'confirmed'}))
         targets.sort(key=lambda item:item[0]!='draft')
@@ -137,7 +137,7 @@ class ReshapeWorkflow:
             session['error']='重塑线未穿过标注边界，请调整编辑线。';self.update_controls();return
         if self.draft.get('reshape_batch') or self.draft_modified() and not any(t=='draft' for t,_ in targets):
             session['error']=ui_text('reshape.finish_draft');self.update_controls();return
-        image=model_image(self.image);stroke=copy.deepcopy(session['stroke']);alternate=session['alternate']
+        image=image_snapshot(self.image);stroke=copy.deepcopy(session['stroke']);alternate=session['alternate']
         single=self.mode_index==0 and self.single_polygon.isChecked();context=self.annotation_context()
         originals=copy.deepcopy(self.current_labels());result_holder=[];result_task=[None]
         self.view.reshape_enabled=False;session.pop('error',None)
@@ -248,8 +248,7 @@ class ReshapeWorkflow:
             controls.enable(self.model_button,False);controls.enable(self.import_button,False);controls.enable(self.import_action,False);controls.enable(self.classes_button,False)
             for key in ('new','open'):controls.enable(self.project_actions[key],False)
             controls.enable(self.confirm_button,False);controls.enable(self.delete_button,False);controls.enable(self.delete_action,False);controls.enable(self.undo_label_action,False)
-            controls.enable(self.undo_all_label_action,False)
-            for control in (self.label_filter,self.previous_button,self.next_button,self.classes,self.reprepare_button,self.preprocess_button,self.bands_button,self.crs_button):controls.enable(control,False)
+            for control in (self.previous_button,self.next_button,self.classes,self.reprepare_button,self.preprocess_button,self.bands_button,self.crs_button):controls.enable(control,False)
             controls.enable(self.undo_prompt_action,not busy and bool(session['stroke']));controls.enable(self.redo_prompt_action,not busy and bool(session.get('redo_stroke')))
         if locked:
             for key in ('positive','negative','box','select_points'):controls.enable(self.mode_actions[key],False)

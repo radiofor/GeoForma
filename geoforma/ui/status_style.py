@@ -6,9 +6,7 @@ SAVED_COLORS=('#176f69','#e5f3ef','#c3e1d8')
 REVIEW_COLORS=('#946516','#fff3de','#edd8ad')
 STYLES={
     ui_text('status.unsaved'):REVIEW_COLORS,
-    ui_text('status.review'):REVIEW_COLORS,
     ui_text('status.confirmed'):SAVED_COLORS,
-    ui_text('status.reviewing'):('#276fa1','#eaf3fc','#c5dced'),
     ui_text('status.editing'):('#4058a0','#eef0fc','#cfd6ef'),
     ui_text('reshape.state'):('#8050a0','#f4edf8','#dfcdea'),
 }

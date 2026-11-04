@@ -94,10 +94,10 @@ class ImageWorkflow:
         if row<0 or row>=len(self.project['images']):return
         if self.image is self.project['images'][row]:return
         self.auto_apply_timer.stop()
-        if self.candidate_task:self.candidate_task.cancel()
+        if self.label_index_task:self.label_index_task.cancel()
         self.store_image_session()
         self.last_error=''
-        self.candidate_indexes.clear()
+        self.label_indexes.clear()
         self.image=self.project['images'][row];session=self.load_image_session()
         if 'class_id' in self.draft:
             self.classes.blockSignals(True);self.classes.setCurrentIndex(self.classes.findData(self.draft['class_id']));self.classes.blockSignals(False)

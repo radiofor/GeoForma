@@ -29,7 +29,7 @@ def new_project(model=None):
             "classes": [{"id": 1, "name": "类别 1"}], "next_class_id": 2,
             "model": normalize_model(model) if model is not None else recommended_model(),
             "workspace": {"single_polygon": True}, "export_crs": "", "export_label_field": DEFAULT_LABEL_FIELD,
-            "smoothing": {mode: {"enabled": True, "value": 1.0} for mode in ('individual','automatic')}}
+            "smoothing": {"individual": {"enabled": True, "value": 1.0}}}
 
 
 def tiles(bounds, width, height, core=768, halo=128):

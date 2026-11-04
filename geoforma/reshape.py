@@ -113,9 +113,9 @@ def reshape_patch(intent,image,valid=None,blockers=(),bounds=None,single=False,p
 
 
 def reshape_raster(image,geometry,stroke,blockers=(),bounds=None,single=False,points=(),alternate=False,task=None):
-    from .raster import validate_grid,fingerprint
-    validate_grid(image)
-    if fingerprint(image['path'])!=image['fingerprint']:raise ValueError('影像源已变化，请重新导入后编辑。')
+    from .raster import validate_source
+    _,current=validate_source(image)
+    if current!=image['fingerprint']:raise ValueError('影像源已变化，请重新导入后编辑。')
     if task:task.check();task.signals.progress.emit(0,0,'按像元网格重塑轮廓…')
     # Manual geometry is authoritative even where the raster has no data.
     intent=reshape_intent(geometry,stroke,alternate)

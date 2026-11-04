@@ -1,5 +1,5 @@
 """Pure label-history replay; safe to execute on immutable worker snapshots."""
-import copy,time
+import copy
 
 
 def validate_entries(entries,image_id,labels,class_ids=None):
@@ -30,17 +30,3 @@ def restore_entries(labels,entries):
     return result,reverse
 
 
-def replay_all(labels,undo,redo,images,task):
-    labels=list(labels);redo=list(redo);dismissed={image['id']:set(image.get('dismissed_candidates',())) for image in images}
-    last=0.
-    for position,entries in enumerate(reversed(undo),1):
-        task.check();labels,reverse=restore_entries(labels,entries);redo.append(reverse)
-        restored={identifier for identifier,old,_ in entries if old};removed={entry[0] for entry in entries}-restored
-        for image_id,values in dismissed.items():
-            values.difference_update(restored)
-            values.update(identifier for identifier,current,_ in reverse if identifier in removed and current and current['image_id']==image_id)
-        now=time.monotonic()
-        if position==len(undo) or now-last>.05:
-            task.signals.progress.emit(position,len(undo),'恢复标签状态');last=now
-    task.check()
-    return {'labels':labels,'redo':redo,'dismissed':{key:sorted(value) for key,value in dismissed.items()}}

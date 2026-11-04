@@ -1,5 +1,5 @@
 """JSON history contracts and snapshots; geometry values are immutable records."""
-from .annotation_modes import INDIVIDUAL,AUTOMATIC,label_mode
+INDIVIDUAL='individual'
 
 
 def label_stack_snapshot(stack):
@@ -25,7 +25,7 @@ def validate_history(project):
         scope=history.get('scope','separate_modes')
         if scope not in ('separate_modes','all_labels'):raise ValueError('项目标签历史范围无效。')
         for mode,record in history['labels'].items():
-            if mode not in (INDIVIDUAL,AUTOMATIC) or not isinstance(record,dict):raise ValueError('项目撤销记录的模式无效。')
+            if mode!=INDIVIDUAL or not isinstance(record,dict):raise ValueError('项目撤销记录的模式无效。')
             for name in ('undo','redo'):
                 stack=record.get(name,[])
                 if not isinstance(stack,list):raise ValueError('项目标签历史格式无效。')
@@ -42,7 +42,7 @@ def validate_history(project):
                         if candidate is not None:
                             if not isinstance(candidate,dict) or candidate.get('id')!=identifier or candidate.get('image_id') not in images:
                                 raise ValueError('项目标签历史引用了无效标签或影像。')
-                            if scope!='all_labels' and label_mode(candidate,images[candidate['image_id']])!=mode:raise ValueError('项目标签历史不能跨标注模式。')
+                            if scope!='all_labels' and candidate.get('annotation_mode',INDIVIDUAL)!=mode:raise ValueError('项目标签历史不能跨标注模式。')
                             if old is not None and scope!='all_labels':old['annotation_mode']=mode
                             if old is not None:
                                 from .label_validation import validate_label

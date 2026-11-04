@@ -5,7 +5,6 @@ from PySide6.QtCore import QTimer,Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication,QMessageBox
 from geoforma.window import MainWindow
-from geoforma.ui.progress_bar import COMPLETION_HOLD_MS
 
 
 def wait(app,condition):
@@ -14,7 +13,7 @@ def wait(app,condition):
     assert condition()
 
 
-def test_model_cleanup_runs_off_ui_thread_and_animation_remains_responsive(tmp_path,monkeypatch):
+def test_model_cleanup_runs_off_ui_thread_and_status_remains_responsive(tmp_path,monkeypatch):
     monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path/'data'))
     app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.dirty=False;w.show()
     started=threading.Event();release=threading.Event();thread_ids=[];w.service.process=object()
@@ -24,19 +23,13 @@ def test_model_cleanup_runs_off_ui_thread_and_animation_remains_responsive(tmp_p
     ticks=[];timer=QTimer();timer.setInterval(5);timer.timeout.connect(lambda:ticks.append(True));timer.start()
     try:
         assert not w.close();wait(app,started.is_set)
-        assert w.shutdown_dialog.isVisible() and w.shutdown_dialog.progress.maximum()==3 and w.shutdown_dialog.progress.value()==2
-        assert '释放模型' in w.shutdown_dialog.phase_label.text()
-        QTest.keyClick(w.shutdown_dialog,Qt.Key.Key_Escape);assert w.shutdown_dialog.isVisible()
+        assert w.closing and not hasattr(w,'shutdown_dialog')
         # Windows can coalesce short timers. Verify fresh GUI heartbeats while
         # cleanup is blocked, without assuming a 5 ms scheduling resolution.
         baseline=len(ticks);deadline=time.monotonic()+.5
         while len(ticks)-baseline<6 and time.monotonic()<deadline:QTest.qWait(10)
         assert len(ticks)-baseline>=6 and thread_ids[0]!=threading.get_ident() and not release.is_set()
-        completed=[];w.shutdown_dialog.progress.completionPainted.connect(lambda:completed.append((time.monotonic(),w.isVisible(),w.shutdown_dialog.isVisible(),w.shutdown_complete)))
         release.set();wait(app,lambda:w.shutdown_complete and w.shutdown_task is None and not w.isVisible())
-        assert completed and completed[0][1:]==(True,True,False) and time.monotonic()-completed[0][0]>=COMPLETION_HOLD_MS*.75/1000
-        assert not w.shutdown_dialog.isVisible()
-        assert w.shutdown_dialog.progress.model.state.phase=='complete'
     finally:
         release.set();timer.stop();wait(app,lambda:w.shutdown_task is None);w.dirty=False;w.close();app.processEvents()
 
@@ -48,8 +41,8 @@ def test_task_wait_phase_is_visible_and_exit_finishes_after_cancellation(tmp_pat
     def work(task):started.set();release.wait(3);task.check()
     w.run('test',work,lambda value:None);wait(app,started.is_set)
     try:
-        w.close();assert w.closing and w.shutdown_dialog.isVisible()
-        assert '结束后台' in w.shutdown_dialog.phase_label.text() and w.task.cancel_event.is_set()
+        w.close();assert w.closing
+        assert w.task.cancel_event.is_set() and not hasattr(w,'shutdown_dialog')
         release.set();wait(app,lambda:w.shutdown_complete and not w.isVisible())
     finally:
         release.set();wait(app,lambda:w.task is None);w.dirty=False;w.close();app.processEvents()
@@ -63,11 +56,9 @@ def test_failed_autosave_dismisses_exit_feedback_and_keeps_work(tmp_path,monkeyp
     def save(*args):started.set();release.wait(3);raise OSError('test disk error')
     monkeypatch.setattr(projects,'save_project',save);monkeypatch.setattr(QMessageBox,'warning',lambda *args:warnings.append(args))
     try:
-        w.close();wait(app,started.is_set);assert w.shutdown_dialog.isVisible() and '保存' in w.shutdown_dialog.phase_label.text()
-        feedback=w.shutdown_dialog
+        w.close();wait(app,started.is_set)
         release.set();wait(app,lambda:w.autosave_task is None)
-        assert warnings and not w.closing and w.shutdown_dialog is None and w.isVisible() and w.dirty
-        assert feedback.progress.model.state.phase=='failed'
+        assert warnings and not w.closing and not hasattr(w,'shutdown_dialog') and w.isVisible() and w.dirty
     finally:
         release.set();wait(app,lambda:w.autosave_task is None);w.project_saves.pending.clear();w.project_saves.failed.clear();w.dirty=False;w.close();app.processEvents()
 
@@ -75,8 +66,42 @@ def test_failed_autosave_dismisses_exit_feedback_and_keeps_work(tmp_path,monkeyp
 def test_idle_exit_needs_no_waiting_dialog(tmp_path,monkeypatch):
     monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path/'data'))
     app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.dirty=False
-    assert w.close() and w.shutdown_complete and w.shutdown_dialog is None
+    assert w.close() and w.shutdown_complete and not hasattr(w,'shutdown_dialog')
     app.processEvents()
+
+
+def test_immediate_autosave_refusal_keeps_window_and_dirty_work(tmp_path,monkeypatch):
+    monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path/'data'))
+    app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.show()
+    w.dirty=True;messages=[]
+    monkeypatch.setattr(w,'autosave',lambda:False)
+    monkeypatch.setattr(QMessageBox,'warning',lambda *args:messages.append(args))
+    assert not w.close() and w.isVisible() and w.dirty and not w.closing and messages
+    monkeypatch.setattr(w,'autosave',lambda:None);w.dirty=False;w.close();app.processEvents()
+
+
+def test_quick_background_shutdown_finishes_without_feedback(tmp_path,monkeypatch):
+    monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path/'data'))
+    app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.dirty=False;w.show()
+    w.service.process=object()
+    def close():w.service.process=None
+    w.service.close=close
+    assert not w.close()
+    wait(app,lambda:w.shutdown_complete and not w.isVisible())
+    assert not hasattr(w,'shutdown_dialog')
+    QTest.qWait(350);app.processEvents()
+    assert not hasattr(w,'shutdown_dialog')
+
+
+def test_quick_save_closes_without_feedback_after_data_is_written(tmp_path,monkeypatch):
+    from geoforma.storage import save_project,load_project
+    monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path/'data'))
+    app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.show()
+    path=tmp_path/'project.gfm';save_project(w.project,path);w.project_path=path
+    w.project['classes'][0]['name']='退出前编辑';w.mark_dirty()
+    assert not w.close()
+    wait(app,lambda:w.shutdown_complete and not w.isVisible())
+    assert not hasattr(w,'shutdown_dialog') and load_project(path)['classes'][0]['name']=='退出前编辑'
 
 
 def test_quick_exit_prevents_delayed_resource_reminder(tmp_path,monkeypatch):
@@ -124,19 +149,3 @@ def test_exit_waits_for_resource_task_before_closing_its_dialog(tmp_path,monkeyp
         release.set();wait(app,lambda:w.task is None);w.dirty=False;w.close();app.processEvents();w.deleteLater()
 
 
-def test_shutdown_stages_never_move_backward_and_aborting_cancels_completion_callback():
-    from PySide6.QtWidgets import QWidget
-    from geoforma.ui.shutdown_dialog import ShutdownDialog
-    app=QApplication.instance() or QApplication([]);parent=QWidget();parent.show();step=[0]
-    dialog=ShutdownDialog(parent,lambda:'test cleanup',lambda:step[0]);dialog.show();app.processEvents()
-    try:
-        assert dialog.progress.model.state.current==0 and dialog.progress.maximum()==3
-        for current,expected in ((1,1),(2,2),(0,2)):
-            step[0]=current;dialog.timer.timeout.emit()
-            assert dialog.progress.model.state.current==expected
-        callbacks=[];dialog.finish(on_finished=lambda:callbacks.append(True))
-        wait(app,dialog.completion_timer.isActive)
-        assert dialog.isVisible() and dialog.progress.display_fraction==1. and not callbacks
-        dialog.finish('failed');QTest.qWait(COMPLETION_HOLD_MS+100);app.processEvents()
-        assert not callbacks and not dialog.isVisible() and not dialog.completion_timer.isActive()
-    finally:dialog.finish('failed');dialog.deleteLater();parent.close();app.processEvents()

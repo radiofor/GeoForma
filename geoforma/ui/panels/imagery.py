@@ -2,7 +2,7 @@
 from ...ui.text import ui_text
 from ...window_preferences import LEFT_SIDEBAR_WIDTHS
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QToolButton
 from ...tool_icons import icon
 from ...theme import BrandHeader, PanelGroupBox as QGroupBox
 from ..controls import action_button, scroll_panel, ElidedLabel,DeviceStatusLabel,TrailingIconButton,CenteredIconActionButton
@@ -53,7 +53,14 @@ def build_project(w):
     w.project_title.setProperty('role', 'project')
     w.project_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
     w.project_title.setFixedHeight(32)
-    layout.addWidget(w.project_title)
+    title_row=QHBoxLayout();title_row.setContentsMargins(0,0,0,0);title_row.setSpacing(4)
+    title_row.addWidget(w.project_title,1)
+    w.project_directory_button=QToolButton();w.project_directory_button.setIcon(icon('open_project'))
+    w.project_directory_button.setIconSize(QSize(16,16));w.project_directory_button.setFixedSize(32,32)
+    w.project_directory_button.setToolTip('打开项目所在文件夹');w.project_directory_button.setAccessibleName('打开项目所在文件夹')
+    w.project_directory_button.setEnabled(bool(w.project_path))
+    w.project_directory_button.clicked.connect(w.open_project_directory)
+    title_row.addWidget(w.project_directory_button);layout.addLayout(title_row)
     for keys in [('new', 'open'), ('save', 'recover')]:
         row = QHBoxLayout()
         row.setSpacing(6)

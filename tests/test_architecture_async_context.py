@@ -47,22 +47,3 @@ def test_completion_hook_can_start_a_new_task_without_losing_its_state(workbench
     finally:release.set()
 
 
-def test_large_undo_is_cancellable_without_partial_label_changes(workbench,monkeypatch):
-    import geoforma.label_history as history
-    w,app,wait,errors=workbench;images(w)
-    w.project['labels']=[dict(id=str(i),image_id='one',class_id=1,status='confirmed',geometry=mapping(box(i*3,0,i*3+1,1))) for i in range(500)]
-    w.label_undo=[[(str(i),None,i)] for i in range(299,500)]
-    w.refresh_labels();wait();before=copy.deepcopy(w.project['labels']);undo=copy.deepcopy(w.label_undo)
-    started=threading.Event();release=threading.Event();original=history.replay_all
-    def replay(*args):
-        started.set();release.wait(4);args[-1].check();return original(*args)
-    monkeypatch.setattr(history,'replay_all',replay)
-    tick=time.monotonic();w.undo_all_labels()
-    try:
-        assert time.monotonic()-tick<.75
-        spin(app,started.is_set);w.cancel();release.set();wait()
-        assert w.project['labels']==before and w.label_undo==undo
-        w.undo_all_labels();wait()
-        assert len(w.project['labels'])==299 and not w.label_undo and len(w.label_redo)==201
-        w.redo_label();wait();assert len(w.project['labels'])==300 and not errors
-    finally:release.set()

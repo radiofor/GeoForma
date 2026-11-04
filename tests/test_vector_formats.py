@@ -65,6 +65,14 @@ def test_cancel_preserves_previous_vector_set(source,tmp_path,ext):
     assert not list(tmp_path.glob('.geoforma-vector-*'))
 
 
+def test_export_cannot_overwrite_project_or_shapefile_sidecar(source,tmp_path):
+    project=tmp_path/'labels.metadata.json';project.write_bytes(b'project')
+    path=tmp_path/'labels.shp'
+    with pytest.raises(ValueError,match='项目文件'):
+        export_vector(source,labels_for(source),path,'',Task(),protected_paths=[project],label_field='class_val')
+    assert project.read_bytes()==b'project' and not path.exists()
+
+
 def test_shp_publish_failure_restores_all_original_files(source,tmp_path,monkeypatch):
     import geoforma.vector_export as writer
     path=tmp_path/'labels.shp';labels=labels_for(source);export_vector(source,labels,path,'',Task(),label_field='class_val')

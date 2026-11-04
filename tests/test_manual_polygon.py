@@ -77,7 +77,7 @@ def test_unfinished_drawing_is_preserved_in_the_project(workbench):
     click_vertex(w,40,40);click_vertex(w,65,40)
     vertices=copy.deepcopy(w.draft['manual_vertices']);w.capture_workspace()
     from geoforma.storage import save_project,load_project
-    path=tmp/'manual.geoforma.json';save_project(w.project,path)
+    path=tmp/'manual.gfm';save_project(w.project,path)
     restored=load_project(path)
     assert restored['workspace']['tool']=='draw_polygon'
     assert restored['workspace']['draft']['manual_vertices']==vertices

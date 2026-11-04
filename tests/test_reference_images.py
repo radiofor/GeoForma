@@ -7,7 +7,7 @@ from rasterio.transform import from_origin
 from PySide6.QtTest import QTest
 from geoforma.reference_images import matching_references,reference_recipe,display_descriptor,read_display
 from geoforma.raster import inspect_source,make_recipe
-from geoforma.model_requests import model_image
+from geoforma.raster_snapshot import image_snapshot
 from geoforma.storage import save_project,load_project
 from test_workbench import workbench
 
@@ -28,7 +28,7 @@ def test_match_and_reproject_to_calculation_grid_without_model_changes(tmp_path)
     assert not matching_references(project,dict(base,path='other.tif'))
     descriptor=display_descriptor(base,ref);rgb,valid=read_display(descriptor,[0,0,60,60],max_size=40)
     assert rgb.shape==(40,40,3) and valid.shape==(40,40) and valid.any()
-    assert base==before and model_image(base)==model_image(before) and '_reference' not in model_image(descriptor)
+    assert base==before and image_snapshot(base)==image_snapshot(before) and '_reference' not in image_snapshot(descriptor)
 
 
 @pytest.mark.parametrize('window,size',[([0,0,0,20],None),([0,0,20,20],0),([0,0,20,20],float('nan')),([0,0,10000,10000],None)])
@@ -67,7 +67,7 @@ def test_multiple_types_switch_only_basemap_and_restore_partial_matches(workbenc
     w.project['labels']=[dict(id='label',image_id=base['id'],annotation_mode='individual',status='confirmed',class_id=1,geometry=mapping(box(10,10,20,20)))]
     w.draft={'points':[[15,15,1]],'box':[10,10,30,30]};w.refresh_labels()
     item=w.view.overlay_records['label'];point=w.view.point_records[0];bounds=w.view.box_item
-    navigation=w.view.capture_navigation();before=copy.deepcopy(model_image(base))
+    navigation=w.view.capture_navigation();before=copy.deepcopy(image_snapshot(base))
     # This fixture suppresses scheduled raster requests; use the real display path here.
     from geoforma.controllers.display import DisplayWorkflow
     w.request_render=lambda overview=False:DisplayWorkflow.request_render(w,overview)
@@ -79,7 +79,7 @@ def test_multiple_types_switch_only_basemap_and_restore_partial_matches(workbenc
         QTest.qWait(160);app.processEvents()
         assert w.view.overlay_records['label'] is item and w.view.point_records[0] is point and w.view.box_item is bounds
         assert item.zValue()>w.view.base_item.zValue() and point.zValue()>item.zValue()
-        assert w.view.capture_navigation()==navigation and model_image(base)==before
+        assert w.view.capture_navigation()==navigation and image_snapshot(base)==before
     w.capture_workspace();save_project(w.project,w.project_path);loaded=load_project(w.project_path)
     assert len(loaded['references'])==2
     w.images.setCurrentRow(1);QTest.qWait(180);app.processEvents()

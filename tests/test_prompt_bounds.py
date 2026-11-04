@@ -69,7 +69,7 @@ def test_native_mask_and_exact_geometry_are_box_bounded(preview):
 
 
 def test_legacy_backend_results_are_clipped_without_new_protocol_arguments():
-    from geoforma.services import ModelEngine
+    from geoforma.inference.engine import ModelEngine
     engine=ModelEngine();engine.prepare_backend=lambda *args:None;engine.window_input=lambda *args:(None,np.ones((1024,1024),bool));calls=[]
     def predict(*args):
         calls.append(args);return {'choices':[{'geometry':mapping(box(0,0,30,30))}]}

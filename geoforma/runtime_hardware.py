@@ -1,5 +1,5 @@
 """Read the NVIDIA driver inventory during background startup, without Torch."""
-import os,subprocess,sys
+import os,subprocess,sys,threading
 from pathlib import Path
 
 
@@ -15,6 +15,23 @@ def detect_hardware():
         names=[line.strip() for line in result.stdout.splitlines() if line.strip()]
         return {'nvidia':names} if names else {}
     except (OSError,subprocess.SubprocessError):return {}
+
+
+class HardwareProbe:
+    """Overlap driver discovery with startup imports without touching Qt."""
+    def __init__(self):
+        self._done=threading.Event();self._value=None;self._error=None
+        def run():
+            try:self._value=detect_hardware()
+            except Exception as error:self._error=error
+            finally:self._done.set()
+        threading.Thread(target=run,name='geoforma-hardware-probe',daemon=True).start()
+
+    def result(self,check):
+        while not self._done.wait(.05):check()
+        check()
+        if self._error is not None:raise self._error
+        return self._value
 
 
 def recommended_profile(model,hardware,installed=None):

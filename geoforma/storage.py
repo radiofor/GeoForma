@@ -2,9 +2,10 @@ import copy
 import json
 import os,time
 from pathlib import Path
-from .atomic_io import atomic_target,atomic_copy,read_json
+from .atomic_io import atomic_target,read_json
 from .source_catalog import SourceGuard,project_sources,relocate_sources
 from .class_colors import normalize_color
+from .project_files import require_project_path
 
 
 def project_snapshot(project):
@@ -34,10 +35,10 @@ def project_snapshot(project):
     return snapshot
 
 
-def save_project(project, path, backup=True):
-    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
-    outputs=[path,path.with_name(path.name+'.bak')] if backup else [path]
-    SourceGuard(project_sources(project)).check(*outputs)
+def save_project(project, path):
+    path=Path(path)
+    SourceGuard(project_sources(project)).check(path)
+    require_project_path(path);path.parent.mkdir(parents=True,exist_ok=True)
     payload=copy.deepcopy(project)
     from .classes import validate_classes
     from .export_settings import label_field
@@ -52,36 +53,24 @@ def save_project(project, path, backup=True):
     relocate_sources(payload,path.parent,relative=True)
     with atomic_target(path) as part:
         with part.open('w',encoding='utf-8') as stream:json.dump(payload,stream,ensure_ascii=False,indent=2,allow_nan=False)
-        if backup and path.exists():atomic_copy(path,path.with_name(path.name+'.bak'))
         # Recovery order represents when the state was captured, not when a slow
         # background writer happened to finish after a newer manual save.
         os.utime(part,ns=(captured,captured))
 
 
 def load_project(path):
-    path=Path(path);project=read_json(path,max_bytes=256*1024**2)
+    path=require_project_path(path);project=read_json(path,max_bytes=256*1024**2)
     from .project_validation import validate_project
     validate_project(project)
-    # Older projects could contain fractional settings. Migrate the actual
-    # smoothing value as well as the control so previews and exports agree.
-    from .smoothing import integer_value
-    for config in project.get('smoothing',{}).values():config['value']=integer_value(config['value'])
-    if 'cache_id' not in project:
-        from .domain import digest
-        original=str(path.resolve())
-        while original.casefold().endswith(('.autosave','.bak')):original=original.rsplit('.',1)[0]
-        project['cache_id']=digest({'project_path':original.casefold()})
     for category in project['classes']:
         if 'color' in category:category['color']=normalize_color(category['color'])
     from .model_preferences import normalize_model
     project['model']={**project['model'],**normalize_model(project['model'])}
-    # Older projects kept an inactive custom value behind a separate pin flag.
-    if project.pop('export_crs_fixed',True) is False:project['export_crs']=''
     project.setdefault('export_crs','')
     from .export_settings import label_field
     project['export_label_field']=label_field(project)
-    from .annotation_modes import migrate_modes
-    migrate_modes(project)
+    from .history import validate_history
+    validate_history(project)
     for label in project['labels']:
         if 'source_geometry' in label:
             label['geometry']=label.pop('source_geometry');label.pop('smoothing_applied',None)
@@ -89,6 +78,4 @@ def load_project(path):
     image_ids={i['id'] for i in project['images']}
     for label in project['labels']:
         if label['image_id'] not in image_ids:raise ValueError('标签引用了不存在的影像。')
-    from .history import validate_history
-    validate_history(project)
     return project

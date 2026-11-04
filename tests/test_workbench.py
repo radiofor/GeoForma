@@ -11,14 +11,14 @@ from geoforma.storage import project_snapshot
 
 @pytest.fixture
 def workbench(tmp_path):
-    app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.settings=QSettings('GeoForma','GeoFormaTests');w.project_path=tmp_path/'workbench.geoforma.json';w.autosave=lambda:None;w.request_render=lambda *a:None;w.autosave_timer.stop();w.show();app.processEvents();w.render_timer.stop()
+    app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.settings=QSettings('GeoForma','GeoFormaTests');w.project_path=tmp_path/'workbench.gfm';w.autosave=lambda:None;w.request_render=lambda *a:None;w.autosave_timer.stop();w.show();app.processEvents();w.render_timer.stop()
     w.auto_apply.setChecked(False)
     errors=[];w.error=errors.append
     def wait():
         start=time.monotonic();settled=0
         while settled<3:
             app.processEvents();time.sleep(.005)
-            active=w.task or w.candidate_task or w.render_task or w.render_timer.isActive() or w.autosave_task or (w.auto_prepare and w.preparation.ids and not w.preparation.paused)
+            active=w.task or w.label_index_task or w.render_task or w.render_timer.isActive() or w.autosave_task or (w.auto_prepare and w.preparation.ids and not w.preparation.paused)
             settled=0 if active else settled+1
             if time.monotonic()-start>10:raise TimeoutError(errors)
     yield w,app,wait,errors
@@ -37,7 +37,7 @@ def fake_image(identifier,path='one.tif'):
 
 def populate(w,wait):
     im=fake_image('one');im['ready']=True;w.project['images']=[im];w.refresh_images();w.images.setCurrentRow(0)
-    w.project['labels']=[{'id':str(i),'image_id':'one','class_id':None,'status':'candidate','geometry':mapping(box(x,100,x+80,180)),
+    w.project['labels']=[{'id':str(i),'image_id':'one','class_id':1,'status':'confirmed','geometry':mapping(box(x,100,x+80,180)),
                           'score':.9,'window':[-128,-128,1024,1024],'edge':False,'source':'automatic'} for i,x in enumerate([100,400,700])]
     w.refresh_labels();wait();return im
 
@@ -109,9 +109,9 @@ def test_small_window_can_scroll_to_every_operation(workbench):
         button=toolbar.widgetForAction(a);assert button.isVisible() and toolbar.rect().contains(button.geometry().bottomRight())
 
 
-def test_deleted_candidate_does_not_reappear_after_regeneration(workbench):
+def test_deleted_label_can_be_undone_and_redone(workbench):
     w,app,wait,errors=workbench;populate(w,wait);original=copy.deepcopy(w.project['labels'])
-    w.select_items('labels',['1']);w.delete_selected();wait();assert '1' in w.image['dismissed_candidates']
+    w.select_items('labels',['1']);w.delete_selected();wait()
     w.refresh_labels();wait();assert {l['id'] for l in w.project['labels']}=={'0','2'}
     w.undo_label();wait();assert {l['id'] for l in w.project['labels']}=={'0','1','2'}
     w.redo_label();wait();assert {l['id'] for l in w.project['labels']}=={'0','2'}
@@ -119,7 +119,7 @@ def test_deleted_candidate_does_not_reappear_after_regeneration(workbench):
 
 def test_delete_keeps_no_next_target_and_context_undo(workbench):
     w,app,wait,errors=workbench;populate(w,wait);w.select_items('labels',['1']);w.delete_selected();wait()
-    assert not w.draft and w.pending_review is None and w.undo_prompt_action.isEnabled()
+    assert not w.draft and w.undo_prompt_action.isEnabled()
     w.undo_context();wait();assert not w.draft and {l['id'] for l in w.project['labels']}=={'0','1','2'}
     w.redo_context();wait();assert {l['id'] for l in w.project['labels']}=={'0','2'}
 
@@ -159,9 +159,9 @@ def test_eye_has_two_status_presentations_for_mouse_and_workspace(workbench):
 
 def test_storage_snapshot_detaches_mutable_project_records(workbench):
     w,app,wait,errors=workbench;populate(w,wait);w.capture_workspace();snapshot=project_snapshot(w.project)
-    w.project['model']['device']='cpu';w.image['candidate_runs']={'new':{'complete':True}};w.project['labels'][0]['status']='confirmed';w.project['labels'].pop()
+    w.project['model']['device']='cpu';w.image['candidate_runs']={'new':{'complete':True}};w.project['labels'][0]['class_id']=2;w.project['labels'].pop()
     assert snapshot['model']['device']=='cuda' and 'candidate_runs' not in snapshot['images'][0]
-    assert len(snapshot['labels'])==3 and snapshot['labels'][0]['status']=='candidate'
+    assert len(snapshot['labels'])==3 and snapshot['labels'][0]['class_id']==1
 
 
 def test_preparation_pause_stops_queue_and_resume_keeps_other_images(workbench):
@@ -183,12 +183,13 @@ def test_async_autosave_does_not_clear_newer_edits(workbench,monkeypatch):
     w,app,wait,errors=workbench;populate(w,wait)
     import PySide6.QtWidgets as ui
     from geoforma.storage import save_project,load_project
-    def slow_save(project,path):time.sleep(.08);save_project(project,path)
+    save_project(w.project,w.project_path)
+    def slow_save(project,path,**kwargs):time.sleep(.08);save_project(project,path,**kwargs)
     monkeypatch.setattr('geoforma.controllers.projects.save_project',slow_save)
     w.autosave=MainWindow.autosave.__get__(w);w.mark_dirty();w.autosave();w.project['classes'].append({'id':4,'name':'冰雪'});w.mark_dirty()
     wait();assert w.dirty
     w.autosave();wait();assert not w.dirty
-    assert load_project(str(w.project_path)+'.autosave')['classes'][-1]['name']=='冰雪'
+    assert load_project(w.project_path)['classes'][-1]['name']=='冰雪'
 
 
 def test_close_aborts_when_autosave_cannot_write(workbench,monkeypatch):

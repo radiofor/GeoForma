@@ -18,7 +18,6 @@ class WorkbenchState:
     selected_ids:set=field(default_factory=set)
     selected_points:set=field(default_factory=set)
     image_sessions:dict=field(default_factory=dict)
-    pending_review:object=None
     runtime_status:dict|None=None
     dirty:bool=False
     dirty_revision:int=0
@@ -29,4 +28,4 @@ class WorkbenchState:
     mode_histories:dict=field(default_factory=dict)
     tool_modes:dict=field(default_factory=dict)
     model_warmup_signature:str|None=None
-    candidate_indexes:dict=field(default_factory=dict)
+    label_indexes:dict=field(default_factory=dict)

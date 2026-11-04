@@ -1,0 +1,19 @@
+GeoForma 商店宣传图
+==================
+
+01-poster-720x1080.png
+上传位置：Microsoft Store 徽标 → 招贴画（720 × 1080）。
+竖版品牌封面，包含 GeoForma Logo 和名称。
+
+02-box-art-1080x1080.png
+上传位置：Microsoft Store 徽标 → 1:1 酷图（1080 × 1080）。
+方形品牌封面，包含 GeoForma Logo 和名称。
+
+03-super-hero-1920x1080.png
+上传位置：Windows 和 Xbox 图像 → 16:9 超级英雄画面（1920 × 1080）。
+横版主视觉，不含产品名称、其他文字、Logo 或软件界面。
+
+三张图片采用统一的深蓝与青绿色、2D 地图色块、湖泊和轮廓节点视觉主题。
+这些是宣传插画；实际软件功能截图仍使用 screenshots 文件夹中的原图。
+制作使用内置 image_gen；generation-prompts.json 记录生成提示词。
+图片均为不透明 PNG，小于 50 MB。商店其他审核规则仍以实际提交页面为准。

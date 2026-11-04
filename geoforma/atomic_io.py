@@ -4,7 +4,6 @@ import json
 from math import isfinite
 import os
 from pathlib import Path
-import shutil
 import tempfile
 import threading
 import time
@@ -56,10 +55,6 @@ def atomic_json(path,value,indent=None):
     with atomic_target(path) as temporary:
         with temporary.open('w',encoding='utf-8') as stream:
             json.dump(value,stream,ensure_ascii=False,indent=indent,allow_nan=False)
-
-
-def atomic_copy(source,target):
-    with atomic_target(target) as temporary:shutil.copyfile(source,temporary)
 
 
 def _invalid_constant(value):raise ValueError('JSON contains a non-finite number: '+value)

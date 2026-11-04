@@ -9,7 +9,8 @@ from geoforma.distribution import VERSION
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--models',nargs='*');parser.add_argument('--device',default='cuda');parser.add_argument('--bundle',type=Path,default=ROOT/'release'/VERSION/'portable/GeoForma');args=parser.parse_args()
     bundle=args.bundle.resolve();out=bundle.parent.parent/'qa'/('models_final' if args.models else 'models');out.mkdir(parents=True,exist_ok=True);data=out/'data';models=data/'models';models.mkdir(parents=True,exist_ok=True)
-    source={s['id']:s['path'] for s in json.loads((ROOT/'experiments/sam_versions/manifest.json').read_text())['models']}
+    from geoforma.weights import default_checkpoint
+    source={spec['id']:default_checkpoint(spec['variant'],spec['backend']) for spec in MODELS}
     env=dict(os.environ)
     for key in ['PYTHONPATH','PYTHONHOME','CONDA_PREFIX','CONDA_DEFAULT_ENV','QT_PLUGIN_PATH','QT_QPA_PLATFORM_PLUGIN_PATH','GDAL_DATA','PROJ_DATA','PROJ_LIB','CUDA_VISIBLE_DEVICES']:env.pop(key,None)
     env.update(PATH=os.environ['SystemRoot']+'/System32;'+os.environ['SystemRoot'],QT_QPA_PLATFORM='offscreen',GEOFORMA_DATA_DIR=str(data))

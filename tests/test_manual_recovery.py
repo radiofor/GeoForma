@@ -1,4 +1,5 @@
 import os,time
+from pathlib import Path
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -17,42 +18,38 @@ def workspace(tmp_path,monkeypatch):
     w.project_saves.pending.clear();w.project_saves.failed.clear();w.image=None;w.dirty=False;w.close();app.processEvents()
 
 
-def test_blank_start_requires_button_and_blank_exit_preserves_recovery(workspace):
-    w,app,tmp=workspace;path=tmp/'data'/'recovery'/'untitled.geoforma.json'
+def test_empty_untitled_recovery_is_not_offered_or_overwritten(workspace):
+    w,app,tmp=workspace;path=tmp/'data'/'recovery'/'untitled.gfm'
     old=new_project();old['classes'][0]['name']='恢复类别';old['workspace']['single_polygon']=True
     save_project(old,path);w.settings.setValue('recovery/last_work',str(path));original=path.read_bytes()
     app.processEvents();assert w.classes.currentText()=='类别 1' and not w.project['images']
-    w.update_controls();assert w.recover_button.isEnabled()
+    w.update_controls();assert not w.recover_button.isEnabled()
     w.mark_dirty();w.autosave();assert w.autosave_task is None and path.read_bytes()==original
-    w.dirty=False;w.recover_button.click()
-    deadline=time.monotonic()+4
-    while w.loading_task or w.project_transition:
-        app.processEvents();time.sleep(.002);assert time.monotonic()<deadline
-    assert w.classes.currentText()=='恢复类别' and w.single_polygon.isChecked()
-    assert w.project_path is None
+    w.dirty=False
 
 
 def test_no_record_disables_button_and_existing_work_cannot_be_replaced(workspace):
     w,app,tmp=workspace;assert not w.recover_button.isEnabled()
-    path=tmp/'previous.geoforma.json';save_project(new_project(),path);w.settings.setValue('recovery/last_work',str(path))
+    path=tmp/'previous.gfm';save_project(new_project(),path);w.settings.setValue('recovery/last_work',str(path))
     w.project['images']=[{'id':'image','path':'source.tif'}];w.update_controls()
     opened=[];w.open_project=lambda *args,**kwargs:opened.append((args,kwargs))
     assert not w.recover_button.isEnabled();w.recover_previous_work();assert not opened
 
 
-def test_recovery_finds_autosave_when_formal_project_is_missing(workspace):
-    w,app,tmp=workspace;path=tmp/'saved.geoforma.json';save_project(new_project(),str(path)+'.autosave')
-    w.settings.setValue('recovery/last_work',str(path));assert w.previous_work()==path
+def test_missing_formal_project_disables_recovery_even_with_sidecar(workspace):
+    w,app,tmp=workspace;path=tmp/'saved.gfm';Path(str(path)+'.autosave').write_text('{}')
+    w.settings.setValue('recovery/last_work',str(path));assert w.previous_work() is None
     calls=[];w.request_project_open=lambda *args,**kwargs:calls.append((args,kwargs))
-    w.update_controls();w.recover_button.click();assert calls==[((path,),{'recover_latest':True})]
+    w.update_controls();assert not w.recover_button.isEnabled();w.recover_button.click();assert not calls
 
 
 def test_legacy_fallback_chooses_newest_available(workspace):
-    w,app,tmp=workspace;root=tmp/'data';unsaved=root/'recovery'/'untitled.geoforma.json';formal=tmp/'saved.geoforma.json'
-    save_project(new_project(),formal);save_project(new_project(),unsaved)
+    w,app,tmp=workspace;root=tmp/'data';unsaved=root/'recovery'/'untitled.gfm';formal=tmp/'saved.gfm'
+    w.settings.remove('recovery/last_work')
+    save_project(new_project(),formal);project=new_project();project['images']=[{'id':'image','path':'source.tif'}];save_project(project,unsaved)
     os.utime(formal,ns=(100,100));os.utime(unsaved,ns=(200,200));w.settings.setValue('last_project',str(formal))
     assert w.previous_work()==unsaved
-    save_project(new_project(),str(formal)+'.autosave');assert w.previous_work()==formal
+    Path(str(formal)+'.autosave').write_text('{}');assert w.previous_work()==unsaved
 
 
 def test_successful_autosave_records_recovery_entry(workspace):
@@ -60,8 +57,14 @@ def test_successful_autosave_records_recovery_entry(workspace):
     deadline=time.monotonic()+4
     while w.autosave_task and time.monotonic()<deadline:app.processEvents();time.sleep(.002)
     assert w.autosave_task is None
-    path=tmp/'data'/'recovery'/'untitled.geoforma.json'
+    path=tmp/'data'/'recovery'/'untitled.gfm'
     assert w.settings.value('recovery/last_work')==str(path) and path.is_file()
+    w.project['classes'][0]['name']='再次修改';w.mark_dirty();w.autosave()
+    deadline=time.monotonic()+4
+    while w.autosave_task and time.monotonic()<deadline:app.processEvents();time.sleep(.002)
+    import json
+    assert json.loads(path.read_text(encoding='utf-8'))['classes'][0]['name']=='再次修改'
+    assert not (path.parent/(path.name+'.bak')).exists()
 
 
 def test_unavailable_resource_aborts_shutdown_without_losing_dirty_work(workspace,monkeypatch):
@@ -80,6 +83,6 @@ def test_unavailable_resource_aborts_shutdown_without_losing_dirty_work(workspac
 
 
 def test_formal_save_records_recovery_entry(workspace):
-    w,app,tmp=workspace;w.project_path=tmp/'saved.geoforma.json';w.save()
+    w,app,tmp=workspace;w.project_path=tmp/'saved.gfm';w.save()
     assert w.settings.value('recovery/last_work')==str(w.project_path)
     assert not w.recover_button.isEnabled()

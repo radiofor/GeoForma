@@ -2,6 +2,7 @@
 import re
 
 DEFAULT_LABEL_FIELD='class_value'
+VECTOR_FORMATS=(('GPKG','.gpkg','GeoPackage (*.gpkg)'),('SHP','.shp','Shapefile (*.shp)'),('GeoJSON','.geojson','GeoJSON (*.geojson)'))
 RESERVED_FIELDS={'label_id','class_name','status','source','method','model','prompts',
                  'edit_state','edit_count','edits','smooth_px','image_id','fid','ogc_fid',
                  'geom','geometry','rowid','_rowid_','oid'}
@@ -13,6 +14,7 @@ def validate_label_field(value,suffix=''):
     if not re.fullmatch(r'[^\W\d]\w*',value) or len(value.encode('utf-8'))>63:
         raise ValueError('标签字段名须以字母、汉字或下划线开头，仅含字母、汉字、数字和下划线，最多 63 个 UTF-8 字节。')
     if value.casefold() in RESERVED_FIELDS:raise ValueError('标签字段名与导出保留字段重复，请使用其他名称。')
+    if suffix.lower()=='.shp' and value==DEFAULT_LABEL_FIELD:return 'class_val'
     if suffix.lower()=='.shp' and len(value.encode('utf-8'))>10:
         raise ValueError('SHP 标签字段名最多 10 个 UTF-8 字节，请缩短名称或改用 GPKG/GeoJSON。')
     return value
@@ -20,6 +22,16 @@ def validate_label_field(value,suffix=''):
 
 def label_field(project):
     return validate_label_field(project.get('export_label_field',DEFAULT_LABEL_FIELD))
+
+
+def export_path(path,suffix):
+    """Make the selected format authoritative while retaining ordinary dotted names."""
+    from pathlib import Path
+    target=Path(path);supported={item[1] for item in VECTOR_FORMATS}
+    if suffix not in supported:raise ValueError('不支持的导出格式。')
+    if target.suffix.lower()==suffix:return str(target)
+    if target.suffix.lower() in supported:return str(target.with_suffix(suffix))
+    return str(target.with_name(target.name+suffix))
 
 
 def target_crs(project,image=None):

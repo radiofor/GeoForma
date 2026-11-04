@@ -165,6 +165,41 @@ def test_real_bootstrap_checks_storage_and_coordinates_without_loading_torch(tmp
     app.processEvents()
 
 
+def test_hardware_detection_runs_in_parallel_and_finishes_before_context(app,monkeypatch):
+    from geoforma import runtime_hardware
+    started=threading.Event();release=threading.Event();phases=[]
+    def detect():
+        started.set()
+        assert release.wait(5)
+        return {'nvidia':['test GPU']}
+    monkeypatch.setattr(runtime_hardware,'detect_hardware',detect)
+    worker=StartupWorker()
+    def phase(index,text):
+        phases.append(index)
+        if index==4:
+            assert started.is_set()
+            release.set()
+    worker.progress.connect(phase)
+    try:
+        worker.start();spin(app,lambda:not worker.isRunning())
+        assert not worker.error and phases==[1,2,3,4]
+        assert worker.result.runtime_hardware=={'nvidia':['test GPU']}
+    finally:release.set();worker.wait()
+
+
+def test_hardware_probe_wait_is_cancellable(monkeypatch):
+    from geoforma import runtime_hardware
+    from geoforma.startup import StartupCancelled
+    release=threading.Event();started=threading.Event()
+    def detect():
+        started.set();release.wait(5);return {}
+    monkeypatch.setattr(runtime_hardware,'detect_hardware',detect)
+    probe=runtime_hardware.HardwareProbe();assert started.wait(2)
+    try:
+        with pytest.raises(StartupCancelled):probe.result(lambda:(_ for _ in ()).throw(StartupCancelled()))
+    finally:release.set()
+
+
 def test_unwritable_data_root_fails_before_widget_import(tmp_path, monkeypatch, app):
     file = tmp_path / 'not_a_directory'
     file.write_text('keep')
@@ -206,7 +241,7 @@ def test_real_workbench_defers_project_and_resource_dialog_until_revealed(app):
         def request_project_open(self,*args):calls.append('project')
         def remind_resources(self):calls.append('resources')
     context=SimpleNamespace(project=new_project(),runtime_hardware={})
-    window=Window('test.geoforma.json',startup_context=context);window.autosave=lambda:None
+    window=Window('test.gfm',startup_context=context);window.autosave=lambda:None
     QTest.qWait(450);assert not calls and not window.isVisible()
     window.show();spin(app,lambda:len(calls)==2);assert calls==['project','resources']
     window.dirty=False;window.close();app.processEvents()

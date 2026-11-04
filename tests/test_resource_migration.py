@@ -27,6 +27,7 @@ def test_migration_moves_verified_managed_files_and_keeps_unknown(tmp_path,monke
     root=tmp_path/'original';root.mkdir();monkeypatch.setenv('GEOFORMA_DATA_DIR',str(root))
     (root/'cache/features').mkdir(parents=True);feature=root/'cache/features'/('a'*64+'.pt');feature.write_bytes(b'feature')
     (root/'cache/active-project.json').write_text('{"owner":"a"}')
+    (root/'recovery').mkdir();obsolete=root/'recovery'/'untitled.gfm.autosave';obsolete.write_text('old')
     unknown=root/'personal.txt';unknown.write_text('keep')
     parent=tmp_path/'disk';parent.mkdir()
     with resource_session():
@@ -35,6 +36,7 @@ def test_migration_moves_verified_managed_files_and_keeps_unknown(tmp_path,monke
     assert (target/'cache/features'/feature.name).read_bytes()==b'feature'
     assert not feature.exists() and unknown.read_text()=='keep' and pending_migration() is None
     assert not (root/'cache/features').exists()
+    assert obsolete.read_text()=='old' and not (target/'recovery'/obsolete.name).exists()
 
 
 def test_interrupted_copy_resumes_without_losing_source(tmp_path,monkeypatch):

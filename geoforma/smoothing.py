@@ -11,18 +11,13 @@ DEFAULT_VALUE=1.0
 MAX_VALUE=5.0
 
 
-def integer_value(value):
-    """Map legacy fractional settings to the nearest supported whole pixel."""
-    return max(1,min(int(MAX_VALUE),math.floor(value+.5)))
-
-
 def settings(project,mode):
     return dict(project.get('smoothing',{}).get(mode,{'enabled':False,'value':DEFAULT_VALUE}))
 
 
 def validate_settings(record):
-    if not isinstance(record,dict) or type(record.get('enabled')) is not bool or not finite_number(record.get('value')) or not .1<=record['value']<=MAX_VALUE:
-        raise ValueError('平滑设置无效：强度必须为 0.1 至 5 个原始像素。')
+    if not isinstance(record,dict) or type(record.get('enabled')) is not bool or not finite_number(record.get('value')) or not 1<=record['value']<=MAX_VALUE or record['value']!=int(record['value']):
+        raise ValueError('平滑设置无效：强度必须为 1 至 5 的整数像素。')
 
 
 def _ring(coordinates,value,task):
@@ -105,13 +100,12 @@ def _smooth_batch(labels,value,image,task,validity):
 
 def stored_labels(project,task=None):
     """Materialize the selected mode options for a project file, preserving sources."""
-    from .annotation_modes import label_mode
     images={im['id']:im for im in project['images']};result=[dict(l) for l in project['labels']]
     for label in result:
         if 'source_geometry' in label:label['geometry']=label.pop('source_geometry');label.pop('smoothing_applied',None)
     groups={}
     for i,label in enumerate(result):
-        image=images[label['image_id']];mode=label_mode(label,image);config=settings(project,mode)
+        image=images[label['image_id']];mode='individual';config=settings(project,mode)
         if config['enabled']:groups.setdefault((image['id'],mode),[]).append(i)
     for (image_id,mode),indices in groups.items():
         config=settings(project,mode);confirmed=[i for i in indices if result[i]['status']=='confirmed']
@@ -120,9 +114,4 @@ def stored_labels(project,task=None):
             derived=_smooth_batch([result[i] for i in confirmed],config['value'],images[image_id],task,validity)
             for i,label in zip(confirmed,derived):
                 result[i]={**label,'source_geometry':result[i]['geometry'],'smoothing_applied':config['value']};result[i].pop('_bounds',None)
-            # Cached candidate runs are independent sets and must never erase each other.
-            for i in indices:
-                if result[i]['status']=='candidate':
-                    original=result[i]['geometry'];result[i]['geometry']=_smooth_batch([result[i]],config['value'],images[image_id],task,validity)[0]['geometry']
-                    result[i].update(source_geometry=original,smoothing_applied=config['value'])
     return result

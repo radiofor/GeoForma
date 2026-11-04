@@ -27,7 +27,7 @@ def saved_project(tmp_path,raster_image):
     project['labels']=[dict(id='saved',image_id=image['id'],status='confirmed',annotation_mode='individual',class_id=1,geometry=geometry)]
     project['workspace']={'image_id':image['id'],'operation':0,'annotation_mode':'individual','class_id':1,
                           'auto_apply':False,'view_window':[10,10,50,50]}
-    path=tmp_path/'loaded.geoforma.json';save_project(project,path)
+    path=tmp_path/'loaded.gfm';save_project(project,path)
     return path,project
 
 
@@ -35,9 +35,32 @@ def test_preparation_is_side_effect_free_and_contains_first_frame_and_paths(save
     path,source=saved_project;before=copy.deepcopy(source)
     loaded=prepare_project(path,(800,600))
     assert loaded.frame is not None and loaded.window[2]<100
-    confirmed,candidates=loaded.index.visible({})
-    assert confirmed[0]['_render_path'].elementCount()>0 and not candidates
+    confirmed=loaded.index.visible({})
+    assert confirmed[0]['_render_path'].elementCount()>0
     assert source==before and all('_render_path' not in label for label in loaded.project['labels'])
+
+
+def test_open_gfm_restores_image_and_labels(workbench,saved_project,tmp_path):
+    w,app,wait,errors=workbench;old,_=saved_project;path=tmp_path/'loaded.gfm'
+    save_project(load_project(old),path)
+    assert w.request_project_open(path)
+    wait_loading(w,app)
+    assert w.project_path==path and w.project_title.text()=='loaded'
+    assert w.image is not None and [label['id'] for label in w.current_labels()]==['saved']
+    assert not errors
+
+
+def test_open_seeds_render_cache_with_loaded_frames(workbench,saved_project,monkeypatch):
+    w,app,wait,errors=workbench;path,_=saved_project;primed=[]
+    original=w.raster_renderer.prime
+    def record(image,window,size,value):
+        primed.append((tuple(window),size,value));original(image,window,size,value)
+    monkeypatch.setattr(w.raster_renderer,'prime',record)
+    assert w.request_project_open(path)
+    wait_loading(w,app)
+    assert len(primed)==2
+    assert primed[0][0]==(0,0,100,100) and primed[1][0]!=(0,0,100,100)
+    assert len(w.raster_renderer.cache)==2 and not errors
 
 
 def test_ui_open_preserves_old_frame_until_one_complete_commit(workbench,saved_project,monkeypatch):
@@ -48,11 +71,11 @@ def test_ui_open_preserves_old_frame_until_one_complete_commit(workbench,saved_p
     save_project(source,path)
     old=w.project;started=threading.Event();release=threading.Event();threads=[];ticks=[]
     original=workflow.prepare_project
-    def slow(*args):
+    def slow(*args,**kwargs):
         threads.append(threading.get_ident());started.set()
         args[-1].signals.progress.emit(0,0,'缓存标签轮廓 · 256/512')
         while not release.wait(.003):args[-1].check()
-        return original(*args)
+        return original(*args,**kwargs)
     monkeypatch.setattr(workflow,'prepare_project',slow)
     sizes=[];set_image=w.view.set_image
     w.view.set_image=lambda x,y:(sizes.append((x,y)),set_image(x,y))[-1]
@@ -61,6 +84,8 @@ def test_ui_open_preserves_old_frame_until_one_complete_commit(workbench,saved_p
     timer=QTimer();timer.setInterval(5);timer.timeout.connect(lambda:ticks.append(1));timer.start()
     assert w.request_project_open(path)
     assert w.project is old and w.project_transition.isVisible() and not sizes
+    deadline=time.monotonic()+3
+    while not started.is_set() and time.monotonic()<deadline:QTest.qWait(10);app.processEvents()
     QTest.qWait(160);app.processEvents()
     assert started.is_set() and len(ticks)>5 and w.project is old
     assert w.project_transition.caption.isVisible()
@@ -73,7 +98,7 @@ def test_ui_open_preserves_old_frame_until_one_complete_commit(workbench,saved_p
     assert sizes==[(100,100)] and not signals and not errors
     assert w.view.base_item is not None or w.view.detail_item is not None
     assert 'saved' in w.view.overlay_records and not w.view.loading.isVisible()
-    assert w.candidate_task is None and w.smoother.task is None
+    assert w.label_index_task is None and w.smoother.task is None
 
 
 @pytest.mark.parametrize('recovering,name',[(False,'打开项目'),(True,'恢复工作')])
@@ -81,10 +106,10 @@ def test_named_loading_progress_remains_live_outside_snapshot_and_keeps_result(w
     from geoforma.controllers import project_loading as workflow
     w,app,wait,errors=workbench;path,_=saved_project;old=w.project;release=threading.Event()
     original=workflow.prepare_project
-    def slow(actual,size,task):
+    def slow(actual,size,task,**kwargs):
         task.signals.progress.emit(256,512,'缓存标签轮廓 · 256/512')
         while not release.wait(.003):task.check()
-        return original(actual,size,task)
+        return original(actual,size,task,**kwargs)
     monkeypatch.setattr(workflow,'prepare_project',slow)
     try:
         assert w.request_project_open(path,recover_latest=recovering)
@@ -117,7 +142,7 @@ def test_named_loading_progress_remains_live_outside_snapshot_and_keeps_result(w
 def test_cancel_project_loading_preserves_current_work_and_never_commits(workbench,saved_project,monkeypatch,method):
     from geoforma.controllers import project_loading as workflow
     w,app,wait,errors=workbench;path,_=saved_project;old=w.project;w.draft={'points':[[4,5,1]]}
-    def slow(actual,size,task):
+    def slow(actual,size,task,**kwargs):
         task.signals.progress.emit(0,0,'加载全图预览…')
         while True:time.sleep(.003);task.check()
     monkeypatch.setattr(workflow,'prepare_project',slow)
@@ -131,7 +156,7 @@ def test_cancel_project_loading_preserves_current_work_and_never_commits(workben
 
 
 def test_project_load_failure_keeps_named_failed_result(workbench,saved_project,tmp_path):
-    w,app,wait,errors=workbench;path=tmp_path/'broken.geoforma.json';path.write_text('{',encoding='utf-8');old=w.project
+    w,app,wait,errors=workbench;path=tmp_path/'broken.gfm';path.write_text('{',encoding='utf-8');old=w.project
     assert w.request_project_open(path,recover_latest=True);wait_loading(w,app)
     assert errors and w.project is old
     assert w.state_label.text()=='恢复工作' and w.progress.phase=='failed'
@@ -156,21 +181,22 @@ def test_completed_project_progress_yields_to_next_model_task(workbench,saved_pr
     wait();assert w.progress.phase=='complete' and w.state_label.text()=='加载模型' and not errors
 
 
-def test_read_or_raster_failure_keeps_existing_work(workbench,saved_project,tmp_path):
+def test_read_or_raster_failure_keeps_existing_work(workbench,saved_project,tmp_path,monkeypatch):
     w,app,wait,errors=workbench;path,source=saved_project
     original=w.project;w.draft={'points':[[10,10,1]]};before=copy.deepcopy(w.draft)
-    malformed=tmp_path/'invalid.geoforma.json';malformed.write_text('{',encoding='utf-8')
+    malformed=tmp_path/'invalid.gfm';malformed.write_text('{',encoding='utf-8')
     assert w.request_project_open(malformed);wait_loading(w,app)
     assert errors and w.project is original and w.draft==before and w.project_transition is None
     errors.clear();missing=copy.deepcopy(source);missing['images'][0]['path']=str(tmp_path/'missing.tif')
+    monkeypatch.setattr(w,'resolve_missing_project_sources',lambda project:None)
     save_project(missing,malformed);assert w.request_project_open(malformed);wait_loading(w,app)
-    assert errors and w.project is original and w.draft==before
+    assert not errors and w.project is original and w.draft==before
 
 
 def test_shrinking_sidebar_is_fully_laid_out_before_transition_capture(workbench,saved_project,tmp_path,monkeypatch):
     w,app,wait,errors=workbench;path,source=saved_project;w.resize(1440,1400)
     many=copy.deepcopy(source);many['images']=[dict(copy.deepcopy(source['images'][0]),id=f'image-{i}') for i in range(6)]
-    many['labels']=[];many['workspace']={};large=tmp_path/'many.geoforma.json';save_project(many,large)
+    many['labels']=[];many['workspace']={};large=tmp_path/'many.gfm';save_project(many,large)
     assert w.open_project(large);app.processEvents();assert w.images.height()>100
     observed=[];finish=w.finish_project_transition
     def check(committed):
@@ -213,19 +239,16 @@ def test_hidden_reshape_stroke_restores_and_becomes_visible_when_raw_view_ends(w
     w.cancel_reshape()
 
 
-def test_restore_does_not_overwrite_other_mode_sessions_or_run_inference(workbench,saved_project):
+def test_restore_preserves_session_and_does_not_run_inference(workbench,saved_project):
     w,app,wait,errors=workbench;path,source=saved_project;image=source['images'][0]
-    source['labels'].append(dict(id='candidate',image_id=image['id'],status='candidate',annotation_mode='automatic',class_id=None,
-                                  geometry=mapping(box(50,50,80,80)),window=[0,0,100,100]))
-    source['workspace'].update(operation=1,annotation_mode='automatic',draft={'base_id':'candidate','geometry':source['labels'][1]['geometry']})
-    image['mode_sessions']={'individual':{'draft':{'points':[[10,10,1]],'pending':False},'selected_ids':['saved'],'undo':[{'points':[]}],'redo':[]},
-                            'automatic':{'draft':{},'selected_ids':['candidate'],'undo':[],'redo':[]}}
-    source['history']={'schema':1,'labels':{'individual':{'undo':[[['saved',None,0]]],'redo':[]},'automatic':{'undo':[[['candidate',None,1]]],'redo':[]}}}
+    source['workspace'].update(operation=0,annotation_mode='individual',draft={'points':[[10,10,1]],'pending':False})
+    image['mode_sessions']={'individual':{'draft':{'points':[[10,10,1]],'pending':False},'selected_ids':['saved'],'undo':[{'points':[]}],'redo':[]}}
+    source['history']={'schema':1,'scope':'all_labels','labels':{'individual':{'undo':[[['saved',None,0]]],'redo':[]}}}
     save_project(source,path);expected=load_project(path);calls=[];w.service.predict=lambda *args:calls.append(args)
     assert w.request_project_open(path);wait_loading(w,app)
     assert w.mode_index==0 and w.draft['points']==[[10,10,1]]
     assert w.project['images'][0]['mode_sessions']['individual']==expected['images'][0]['mode_sessions']['individual']
-    assert {label['id'] for label in w.current_labels()}=={'saved','candidate'} and not calls
+    assert {label['id'] for label in w.current_labels()}=={'saved'} and not calls
     assert w.draft['points']==[[10,10,1]] and w.prompt_undo==[{'points':[]}]
     assert w.label_undo==history_snapshot(expected['history'])['labels']['individual']['undo'] and not errors
 
@@ -245,7 +268,7 @@ def test_navigation_scale_and_center_do_not_drift_across_repeated_loads(workbenc
 def test_close_cancels_background_open_without_replacing_work(workbench,saved_project,monkeypatch):
     from geoforma.controllers import project_loading as workflow
     w,app,wait,errors=workbench;path,_=saved_project;original=w.project;started=threading.Event()
-    def slow(*args):
+    def slow(*args,**kwargs):
         started.set()
         while True:time.sleep(.003);args[-1].check()
     monkeypatch.setattr(workflow,'prepare_project',slow)

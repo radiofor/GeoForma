@@ -57,7 +57,7 @@ def test_multiple_crossed_labels_save_and_undo_as_one_transaction(workbench):
     assert all(row.status=='未保存' for row in w.label_presenter.rows)
     assert shape(w.view.overlay_records['other'].geometry_value).area<100
     # Unsaved results survive reopening and remain a single confirmation.
-    w.project_path=tmp/'batch.geoforma.json';w.save();w.open_project(w.project_path);wait(w,app)
+    w.project_path=tmp/'batch.gfm';w.save();w.open_project(w.project_path);wait(w,app)
     assert len(w.draft['reshape_batch'])==2
     QTest.keyClick(w.view.viewport(),Qt.Key.Key_Return);wait(w,app)
     assert not w.draft and len(w.label_undo)==1
@@ -78,7 +78,7 @@ def test_invalid_target_keeps_the_entire_batch_unchanged(workbench):
 
 def test_unbound_stroke_survives_reopen(workbench):
     w,app,tmp=workbench;w.begin_reshape(auto=True);w.add_reshape_point(18,25);w.add_reshape_point(52,25)
-    w.project_path=tmp/'stroke.geoforma.json';w.save();w.cancel_reshape();w.open_project(w.project_path);wait(w,app)
+    w.project_path=tmp/'stroke.gfm';w.save();w.cancel_reshape();w.open_project(w.project_path);wait(w,app)
     assert w.reshape_session['target']=='auto' and w.reshape_session['stroke']==[[18,25],[52,25]]
 
 

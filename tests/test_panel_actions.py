@@ -10,7 +10,8 @@ def test_panel_actions_replace_menus_and_duplicate_toolbar_entries():
     assert w.menuBar().isHidden() and not w.menuBar().actions()
     assert not hasattr(w,'more_button') and not hasattr(w,'options_menu')
     assert w.reprepare_button.text()=='重新准备全图' and not hasattr(w,'export_crs_button')
-    assert not hasattr(w,'export_kind') and w.vector_export_button.text()=='导出标签'
+    assert [w.export_kind.itemText(i) for i in range(w.export_kind.count())]==['GPKG','SHP','GeoJSON']
+    assert w.vector_export_button.text()=='导出标签'
     assert not hasattr(w,'undo_label_button') and not hasattr(w,'edit_button')
     assert all(a in w.actions() for a in w.project_actions.values())
     assert [w.project_actions[k].shortcut().toString() for k in ('new','open','save','recover')]==['','','','']
@@ -24,9 +25,9 @@ def test_panel_actions_replace_menus_and_duplicate_toolbar_entries():
     tools=[a.text() for toolbar in w.findChildren(QToolBar) for a in toolbar.actions()]
     assert '导出' not in tools and '保存项目' not in tools and '保存' not in tools
     assert len([b for b in w.findChildren(QToolButton) if b.defaultAction() is w.project_actions['save']])==1
-    export=[];w.export=lambda kind:export.append(kind)
+    export=[];w.export=lambda:export.append(w.export_kind.currentData())
     w.image={'id':'test','width':1000,'height':1000,'model_recipe':None};w.project['labels']=[{'id':'candidate','image_id':'test','status':'candidate','class_id':None,'geometry':mapping(box(0,0,1,1))}]
     w.refresh_labels();assert not w.vector_export_button.isEnabled()
-    w.project['labels'][0].update(status='confirmed',class_id=1);w.refresh_labels()
-    assert w.vector_export_button.isEnabled();w.vector_export_button.click();assert export==['gpkg']
+    w.project['labels']=[dict(w.project['labels'][0],status='confirmed',class_id=1)];w.refresh_labels()
+    assert w.vector_export_button.isEnabled();w.vector_export_button.click();assert export==['.gpkg']
     w.image=None;w.project['labels']=[];w.dirty=False;w.close();app.processEvents()

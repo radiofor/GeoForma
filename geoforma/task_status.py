@@ -79,7 +79,7 @@ def task_detail(title,stage='',kind=None,model=None):
     stage=_STAGES.get(stage,stage)
     # Remove worker counters only from recognized task phrases. Paths, model
     # versions, image dimensions and byte counts must remain intact.
-    match=re.fullmatch(r'(导入影像|准备影像|生成候选|保存候选)\s+\d+\s*/\s*\d+(?:[：:]\s*(.*))?',stage)
+    match=re.fullmatch(r'(导入影像|准备影像)\s+\d+\s*/\s*\d+(?:[：:]\s*(.*))?',stage)
     if match:stage=match.group(1)+(' · '+match.group(2) if match.group(2) else '')
     stage=re.sub(r'^(缓存标签轮廓) · \d+\s*/\s*\d+$',r'\1',stage)
     stage=re.sub(r'^分割窗口 (\d+×\d+)；编码或复用特征$',r'处理区域 \1 像素',stage)

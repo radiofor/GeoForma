@@ -33,69 +33,55 @@ class LabelListWorkflow:
         self._draft_parts_cache=live_cache
         return records
 
-    def candidate_signature(self):
+    def label_index_signature(self,labels=None):
+        if labels is None:labels=self.current_labels()
         return (self.image['id'] if self.image else None,
-                tuple((l['id'],l['status'],id(l['geometry']),l.get('score'),bool(l.get('edge')),l.get('class_id')) for l in self.current_labels()),
+                tuple((l['id'],l['status'],id(l['geometry']),l.get('score'),bool(l.get('edge')),l.get('class_id')) for l in labels),
                 self.annotation_mode())
 
-    def ensure_candidate_index(self):
-        key=self.candidate_signature()
-        if self.candidate_key==key:return True
-        context=self.annotation_context();cached=self.candidate_indexes.get(context)
-        if cached and cached[0]==key:self.candidate_key,self.candidate_index=cached;return True
+    def ensure_label_index(self,labels=None):
+        if labels is None:labels=self.current_labels()
+        key=self.label_index_signature(labels)
+        if self.label_index_key==key:return True
+        context=self.annotation_context();cached=self.label_indexes.get(context)
+        if cached and cached[0]==key:self.label_index_key,self.label_index=cached;return True
         from ..operation_state import interaction_locked
         if interaction_locked(self):return False
-        labels=self.current_labels()
         if len(labels)<=32 and sum(vertex_count(l['geometry']) for l in labels)<=4096:
-            self.candidate_index=LabelIndex(labels);self.candidate_key=key
-            self.candidate_indexes[context]=(key,self.candidate_index);return True
-        if self.candidate_task is None and not self.closing:
-            snapshot=[dict(label) for label in labels];task=Task(lambda t:LabelIndex(snapshot,task=t));self.candidate_task=task
+            self.label_index=LabelIndex(labels);self.label_index_key=key
+            self.label_indexes[context]=(key,self.label_index);return True
+        if self.label_index_task is None and not self.closing:
+            snapshot=[dict(label) for label in labels];task=Task(lambda t:LabelIndex(snapshot,task=t));self.label_index_task=task
             self.background_activity.set('labels','准备标签',f'{len(labels)} 个目标',task)
             def ready(index):
-                if context==self.annotation_context() and key==self.candidate_signature():
-                    self.candidate_index=index;self.candidate_key=key;self.candidate_indexes[context]=(key,index)
+                if context==self.annotation_context() and key==self.label_index_signature():
+                    self.label_index=index;self.label_index_key=key;self.label_indexes[context]=(key,index)
             def failed(message):
                 if task.cancel_event.is_set():return
                 self.log_message('准备标签失败：'+message)
-                if context==self.annotation_context() and key==self.candidate_signature():
-                    if not self.candidate_key or self.candidate_key[0]!=key[0]:self.candidate_index=LabelIndex([])
-                    self.candidate_key=key
+                if context==self.annotation_context() and key==self.label_index_signature():
+                    if not self.label_index_key or self.label_index_key[0]!=key[0]:self.label_index=LabelIndex([])
+                    self.label_index_key=key
                     self.statusBar().showMessage('轮廓显示失败，标签记录保留。详细信息见任务记录。',7000)
             def finished():
-                if self.candidate_task is task:self.candidate_task=None
+                if self.label_index_task is task:self.label_index_task=None
                 self.background_activity.set('labels','')
                 if self.closing:QTimer.singleShot(0,self.close)
                 else:self.refresh_labels()
             task.signals.result.connect(ready);task.signals.error.connect(failed);task.signals.finished.connect(finished)
-            self.candidate_pool.start(task)
+            self.label_index_pool.start(task)
         return False
 
-    def current_batch_labels(self):return self.current_labels()
-
-    def presentation_labels(self):
-        if self.candidate_index is None or not self.candidate_key:return []
-        signature=self.candidate_signature()
-        if (self.candidate_key[0],self.candidate_key[2])!=(signature[0],signature[2]):return []
-        saved,candidates=self.candidate_index.visible(self.draft);live={l['id'] for l in self.current_labels()}
-        selected=self.label_filter.currentIndex()
-        return [l for l in ([] if selected==2 else saved)+([] if selected==1 else candidates) if l['id'] in live]
+    def presentation_labels(self,labels=None):
+        if self.label_index is None or not self.label_index_key:return []
+        if (self.label_index_key[0],self.label_index_key[2])!=(self.image['id'] if self.image else None,self.annotation_mode()):return []
+        if labels is None:labels=self.current_labels()
+        saved=self.label_index.visible(self.draft);live={l['id'] for l in labels}
+        return [l for l in saved if l['id'] in live]
 
     def refresh_labels(self):
-        labels=self.current_labels();ready=self.ensure_candidate_index();visible=self.presentation_labels()
-        saved=[l for l in labels if l['status']=='confirmed'] if self.label_filter.currentIndex()!=2 else []
-        candidates=[l for l in visible if l['status']=='candidate'];base=self.draft.get('base_id')
-        table=saved+candidates
-        if base and base not in {l['id'] for l in table}:
-            original=next((l for l in labels if l['id']==base),None)
-            if original and self.label_filter.currentIndex() in (0,1 if original['status']=='confirmed' else 2):
-                if original['status']=='candidate':
-                    candidates.append(original)
-                    if self.candidate_index:
-                        order={label['id']:i for i,label in enumerate(self.candidate_index.candidates)}
-                        candidates.sort(key=lambda label:order.get(label['id'],len(order)))
-                    table=saved+candidates
-                else:table.insert(0,original)
+        labels=self.current_labels();ready=self.ensure_label_index(labels)
+        base=self.draft.get('base_id');table=labels
         drafts=self.draft_labels();draft_ids={d['id'] for d in drafts}
         # Replace existing edited rows in place, and append new components.
         replacements={d['id']:d for d in drafts}
@@ -105,15 +91,13 @@ class LabelListWorkflow:
         if ready:
             self.selected_ids.intersection_update({l['id'] for l in table}|({base} if base else set()))
         self.selected_id=next(iter(self.selected_ids)) if len(self.selected_ids)==1 else None
-        self.label_count.set_counts(sum(l['status']=='confirmed' for l in labels),
-                                    len(self.candidate_index.candidates) if ready else sum(l['status']=='candidate' for l in labels),ready=ready)
         names={c['id']:c['name'] for c in self.project['classes']};rows=[]
         editing=self.reshape_session['label']['id'] if self.reshape_session else base
         editing_ids={editing}|{d.get('base_id') for d in self.draft.get('reshape_batch',[])}
         from ..ui.label_table import LabelRow
-        for position,label in enumerate(table):
-            title=names.get(label.get('class_id'),'未分类') if label['status'] in ('confirmed','draft') else f'候选 {position+1}'
-            status=ui_text('status.unsaved' if label['id'] in draft_ids else 'status.editing' if label['id'] in editing_ids else 'status.confirmed' if label['status']=='confirmed' else 'status.review')
+        for label in table:
+            title=names.get(label.get('class_id'),'未分类')
+            status=ui_text('status.unsaved' if label['id'] in draft_ids else 'status.editing' if label['id'] in editing_ids else 'status.confirmed')
             rows.append(LabelRow(label['id'],title,status,bool(label.get('edge')),label['id'] in self.selected_ids,label.get('class_id')))
         self.label_presenter.set_categories(self.project['classes'],self.change_label_class)
         self.label_presenter.sync(rows);self.redraw();self.update_controls()

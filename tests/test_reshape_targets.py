@@ -59,7 +59,7 @@ def test_unsaved_draft_reshape_cancel_commit_undo_redo_and_confirm(workbench):
 
 def test_unsaved_manual_history_survives_project_reopen(workbench):
     w,app,tmp=workbench;draft_target(w);w.begin_reshape();preview(w,app)
-    w.project_path=tmp/'draft.geoforma.json';w.save();w.open_project(w.project_path)
+    w.project_path=tmp/'draft.gfm';w.save();w.open_project(w.project_path)
     assert w.draft['editing_state']=='manual' and not w.project['labels']
     w.undo_context();assert shape(w.draft['geometry']).equals(shape(G)) and not w.model_prompts_locked()
     w.redo_context();assert shape(w.draft['geometry']).area==124 and w.model_prompts_locked()
@@ -96,7 +96,7 @@ def test_finish_controls_apply_and_leave_tool_without_saving(workbench,method):
 def test_unsaved_pending_stroke_survives_project_reopen(workbench):
     w,app,tmp=workbench;draft_target(w);w.begin_reshape()
     w.add_reshape_point(22,28);w.add_reshape_point(22,34)
-    w.project_path=tmp/'pending.geoforma.json'
+    w.project_path=tmp/'pending.gfm'
     w.capture_workspace()
     from geoforma.storage import save_project
     save_project(w.project,w.project_path)
@@ -105,14 +105,3 @@ def test_unsaved_pending_stroke_survives_project_reopen(workbench):
     assert shape(w.draft['geometry']).equals(shape(G)) and not w.project['labels']
 
 
-def test_candidate_can_be_reshaped_without_confirming_it(workbench):
-    w,app,_=workbench;w.project['labels'][0].update(status='candidate',annotation_mode='automatic')
-    w.refresh_labels()
-    deadline=time.monotonic()+4
-    while w.candidate_task and time.monotonic()<deadline:app.processEvents();QTest.qWait(2)
-    w.select_label('target')
-    original=copy.deepcopy(w.project['labels'][0]);w.begin_reshape();preview(w,app)
-    assert w.project['labels'][0]['status']=='candidate'
-    assert w.project['labels'][0]==original and w.draft['editing_state']=='manual'
-    w.undo_context();w.select_label('target')
-    assert w.project['labels'][0]['status']=='candidate' and not w.model_prompts_locked()

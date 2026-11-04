@@ -36,12 +36,12 @@ def main():
     w.project['classes']=[{'id':1,'name':'湖泊'},{'id':2,'name':'其他水体'}];w.project['next_class_id']=3;w.refresh_classes()
     image=inspect_source(source);image['model_recipe']=make_recipe(image,[1,2,3]);image['display_recipe']=image['model_recipe'];image['ready']=False
     w.project['images']=[image];w.refresh_images();w.images.setCurrentRow(0)
-    w.project_path=data/'demo.geoforma.json';w.refresh_project_title();w.update_controls();w.resize(1440,960);w.show()
+    w.project_path=data/'demo.gfm';w.refresh_project_title();w.update_controls();w.resize(1440,960);w.show()
     def settle():
         deadline=time.monotonic()+20
         while True:
             app.processEvents();time.sleep(.02)
-            busy=w.render_task or w.render_timer.isActive() or w.smoother.task or w.smoother.timer.isActive() or w.candidate_task
+            busy=w.render_task or w.render_timer.isActive() or w.smoother.task or w.smoother.timer.isActive() or w.label_index_task
             if not busy:break
             if time.monotonic()>deadline:raise TimeoutError('Screenshot render did not settle')
         for _ in range(5):app.processEvents()

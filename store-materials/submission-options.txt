@@ -1,0 +1,24 @@
+GeoForma 提交选项
+================
+
+发布暂缓选项
+------------
+按用户选择，使用第一项“在此提交通过认证后立即予以发布（或者根据你在‘计划’部分选择的日期予以发布）”。
+如果“定价和可用性”中没有设置延后的发布日期，微软认证通过后将自动开始发布。
+这仍包含微软认证流程。签名 MSIX 安装态与商店认证以实际验收记录为准。
+
+说明语言与提示含义
+------------------
+微软公开填写说明未规定这一权限说明必须使用英文；以下提供英文稿，便于审核团队理解。
+runFullTrust 提示表示软件声明了需要审核批准的完整信任桌面运行权限，不表示检测出了程序运行错误。
+GeoForma 使用普通用户权限运行本地桌面进程、原生 GIS 组件和模型推理子进程，因此声明该权限。
+
+runFullTrust 用途说明
+--------------------
+将以下英文正文粘贴到“为何需要使用 runFullTrust 功能，如何在产品中使用？”输入框：
+
+GeoForma is a 64-bit Windows desktop application built with Python and Qt. It requires runFullTrust to execute its packaged desktop process and an application-owned child process for local SAM inference using PyTorch. Native GDAL/Rasterio libraries handle user-selected geospatial imagery and vector export.
+
+The application runs with the current user's permissions and does not request administrator elevation. Optional inference libraries and model weights are downloaded from configured sources or imported locally, validated, and stored in the application's user-data directory. SAM 3 weights use the configured Hugging Face mirror. It does not install drivers or system services or modify system Python. User imagery, labels, and project files are not automatically uploaded to the developer or a cloud inference service.
+
+完成后点击页面底部“保存”。此文件中的说明不代表安装态验收或商店认证已经完成。

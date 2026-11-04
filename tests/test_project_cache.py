@@ -19,19 +19,18 @@ def feature(root,key='a'):
     path=root/'cache/features'/(key*64+'.pt');path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'features');return path
 
 
-def test_owner_switch_deletes_features_automatic_and_abandoned_temporaries(tmp_path):
+def test_owner_switch_deletes_features_and_abandoned_temporaries(tmp_path):
     root=tmp_path;activate_project_cache(root,'a'*32)
     main=feature(root)
-    automatic=root/'cache/automatic'/('b'*64+'.json');automatic.parent.mkdir();automatic.write_text('{}')
     partial=main.with_name('.'+main.name+'.abcd1234.tmp');partial.write_bytes(b'partial')
     exchange=root/'runtime/exchange/worker_abcd'/('f'*32);exchange.mkdir(parents=True)
     npz=exchange/'input.npz';npz.write_bytes(b'npz');(exchange.parent/'worker.log').write_text('log')
     protected=[]
-    for relative in ('models/model.pt','recovery/work.json','labels.geoforma.json','source.tif','cache/features/user.tif'):
+    for relative in ('models/model.pt','recovery/work.json','labels.gfm','source.tif','cache/features/user.tif'):
         path=root/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(b'preserve');protected.append(path)
     assert not activate_project_cache(root,'a'*32)['cleared'] and main.exists()
     result=activate_project_cache(root,'b'*32)
-    assert result['cleared'] and not any(p.exists() for p in (main,automatic,partial,npz))
+    assert result['cleared'] and not any(p.exists() for p in (main,partial,npz))
     assert not exchange.parent.exists() and all(p.read_bytes()==b'preserve' for p in protected)
     assert json.loads((root/'cache/active-project.json').read_text())['owner']=='b'*32
 
@@ -65,15 +64,12 @@ def test_service_stops_previous_writer_before_removing_cache(tmp_path,monkeypatc
     assert not service.activate_project(tmp_path,'b'*32) and events==['stopped']
 
 
-def test_cache_id_survives_save_as_and_old_project_recovery(tmp_path):
-    project=new_project();path=tmp_path/'one.geoforma.json';save_project(project,path)
-    second=tmp_path/'two.geoforma.json';save_project(load_project(path),second)
+def test_cache_id_survives_save_as_and_missing_id_is_rejected(tmp_path):
+    project=new_project();path=tmp_path/'one.gfm';save_project(project,path)
+    second=tmp_path/'two.gfm';save_project(load_project(path),second)
     assert load_project(path)['cache_id']==load_project(second)['cache_id']==project['cache_id']
     old=copy.deepcopy(project);old.pop('cache_id');path.write_text(json.dumps(old))
-    Path(str(path)+'.autosave').write_text(json.dumps(old))
-    Path(str(path)+'.autosave.bak').write_text(json.dumps(old))
-    assert load_project(path)['cache_id']==load_project(str(path)+'.autosave')['cache_id']
-    assert load_project(path)['cache_id']==load_project(str(path)+'.autosave.bak')['cache_id']
+    with pytest.raises(ValueError,match='缓存标识'):load_project(path)
 
 
 def test_replacing_cache_changes_revision_even_when_the_same_project_returns(tmp_path):
@@ -154,12 +150,10 @@ def test_resource_status_remains_available_while_desktop_owns_data(tmp_path):
 
 def test_linked_feature_cache_cannot_reach_native_writer(tmp_path,monkeypatch):
     from types import SimpleNamespace
-    from geoforma import backend
     from geoforma.backend import SamBackend
     directory=tmp_path/'cache'/'features';directory.mkdir(parents=True)
     original=Path.is_junction
     monkeypatch.setattr(Path,'is_junction',lambda path:path==directory or original(path))
-    monkeypatch.setattr(backend,'data_dir',lambda:tmp_path)
     monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path))
     calls=[];native=SamBackend();native.key=lambda *args:'a'*64
     native.predictor=SimpleNamespace(set_image=lambda *args:calls.append('native'))
@@ -177,7 +171,7 @@ def test_new_project_clears_disk_and_memory_without_touching_source(workbench):
     w.new();wait()
     assert w.project['cache_id']!=old_owner and not w.project['images'] and not path.exists()
     assert not w.raster_renderer.cache and w.raster_renderer.cache_bytes==0
-    assert not w.candidate_indexes and not errors
+    assert not w.label_indexes and not errors
 
 
 def test_open_other_project_cleans_old_cache_before_preparation(workbench,saved_project):
@@ -199,7 +193,7 @@ def test_same_project_keeps_its_valid_preparation_revision(workbench,saved_proje
 def test_invalid_project_does_not_clear_current_cache(workbench,tmp_path):
     w,app,wait,errors=workbench;root=data_dir()
     w.service.activate_project(root,w.project['cache_id']);cached=feature(root)
-    path=tmp_path/'invalid.json';path.write_text('invalid')
+    path=tmp_path/'invalid.gfm';path.write_text('invalid')
     assert not w.open_project(path) and cached.exists() and errors
 
 

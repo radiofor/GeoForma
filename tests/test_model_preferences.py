@@ -28,11 +28,27 @@ def test_first_use_recommends_sam21_small_without_loading_model():
 
 
 def test_preferences_restore_family_variant_device_path_and_auto_runtime(tmp_path):
-    value=config('sam2','large','cpu',str(tmp_path/'model with spaces.pt'));value['execution']='wsl'
+    value=config('sam2','large','cpu',str(tmp_path/'model with spaces.pt'))
     assert remember_model(application_settings(),value)
     restored=last_model(application_settings())
     assert restored==dict(value,execution='auto')
+    assert not remember_model(application_settings(),dict(value,execution='wsl'))
     assert not (tmp_path/'model with spaces.pt').exists()
+
+
+def test_unchanged_model_does_not_repeat_settings_sync():
+    from PySide6.QtCore import QSettings
+    class Settings:
+        Status=QSettings.Status
+        def __init__(self):self.values={};self.syncs=0
+        def value(self,key,default=''):return self.values.get(key,default)
+        def setValue(self,key,value):self.values[key]=value
+        def sync(self):self.syncs+=1
+        def status(self):return self.Status.NoError
+    settings=Settings();model=config()
+    assert remember_model(settings,model) and settings.syncs==1
+    assert remember_model(settings,model) and settings.syncs==1
+    assert remember_model(settings,dict(model,device='cuda')) and settings.syncs==2
 
 
 def test_closing_and_creating_new_window_restores_last_model():
@@ -45,7 +61,7 @@ def test_closing_and_creating_new_window_restores_last_model():
 def test_project_model_has_priority_over_last_application_model(tmp_path):
     from geoforma.storage import save_project
     assert remember_model(application_settings(),config('sam2.1','large'))
-    project=new_project(config('sam','vit_b'));path=tmp_path/'existing.geoforma.json';save_project(project,path)
+    project=new_project(config('sam','vit_b'));path=tmp_path/'existing.gfm';save_project(project,path)
     w,app=window();assert w.project['model']['variant']=='large'
     w.open_project(path);assert w.project['model']==project['model']
     close(w,app);assert last_model(application_settings())==project['model']

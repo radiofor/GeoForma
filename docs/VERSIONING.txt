@@ -7,7 +7,7 @@ GeoForma 版本与发布约定
 
 版本源：geoforma/distribution.py 的 VERSION。
 Windows EXE 属性、应用版本、诊断和安装器从该版本生成；同时更新当前 README 与发行说明。
-每次完整构建独立的发布包，保留旧包，不把旧 EXE 改写成新版本。
+每次完整构建当前发布包，不把旧 EXE 改写成新版本；清理过期发布材料。
 商店包位于 release/<版本号>/store，对应构建日志位于 build/release_<下划线版本号>，
 验收报告位于 release/<版本号>/qa。如另行制作普通安装包，安装 EXE、全部同名 .bin、
 SHA256SUMS.txt 和 files.json 一起交付。

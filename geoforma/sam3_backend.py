@@ -4,7 +4,6 @@ from pathlib import Path
 import torch
 from .backend import SamBackend,atomic_torch
 from .sam2_backend import Sam2Backend
-from .domain import data_dir
 from .model_catalog import SAM3_COMMIT,adapter_schema,model_spec
 
 

@@ -19,7 +19,7 @@ def test_custom_names_keep_ids_and_deleted_ids_are_not_reused(tmp_path):
     dialog.remove();dialog.name.setText('农田');dialog.add()
     assert dialog.classes[-1]['id']==3
     project['classes'],project['next_class_id'],_=dialog.value()
-    path=tmp_path/'classes.geoforma.json';save_project(project,path);restored=load_project(path)
+    path=tmp_path/'classes.gfm';save_project(project,path);restored=load_project(path)
     assert restored['classes']==project['classes'] and next_class_id(restored)==4
     dialog.close()
 

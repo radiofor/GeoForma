@@ -3,7 +3,10 @@ from collections import defaultdict
 from pathlib import Path
 
 
-def reference_key(record):return record['group'].casefold(),Path(record['path']).stem.casefold()
+def reference_stem(path):return Path(path).stem.casefold()
+
+
+def reference_key(record):return record['group'].casefold(),reference_stem(record['path'])
 
 
 def merge_references(existing,incoming):
@@ -29,6 +32,6 @@ class ReferenceLookup:
     def for_image(self,references,image):
         if references is not self.source or len(references)!=self.length:
             grouped=defaultdict(list)
-            for record in references:grouped[Path(record['path']).stem.casefold()].append(record)
+            for record in references:grouped[reference_stem(record['path'])].append(record)
             self.source=references;self.length=len(references);self.by_stem={key:tuple(value) for key,value in grouped.items()}
-        return self.by_stem.get(Path(image['path']).stem.casefold(),()) if image and image.get('path') else ()
+        return self.by_stem.get(reference_stem(image['path']),()) if image and image.get('path') else ()

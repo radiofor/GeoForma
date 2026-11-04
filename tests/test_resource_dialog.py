@@ -43,7 +43,7 @@ def test_resource_location_change_is_disabled_during_cleanup(workbench,monkeypat
 def test_migration_saves_dirty_work_before_starting(workbench,monkeypatch,tmp_path):
     from geoforma import resource_migration
     w,app,wait,errors=workbench;calls=[]
-    w.dirty=True;w.project_path=tmp_path/'project.geoforma.json'
+    w.dirty=True;w.project_path=tmp_path/'project.gfm'
     monkeypatch.setattr(w,'autosave',lambda:calls.append('autosave'))
     monkeypatch.setattr(resource_migration,'migrate_resources',lambda *args:calls.append('migrate'))
     dialog=ResourceDialog(w);dialog.change_location(tmp_path)
@@ -72,12 +72,10 @@ def test_interrupted_migration_blocks_resource_changes_and_can_resume(workbench,
 def test_resource_switch_busy_destination_does_not_change_saved_location(workbench,monkeypatch,tmp_path):
     from geoforma.resource_location import current_resource_dir,prepare_resource_parent,require_resource_dir
     from geoforma.session_guard import ResourceLease,resource_session
-    from geoforma.ui import resources
     w,app,wait,errors=workbench
     root=tmp_path/'data';root.mkdir();monkeypatch.setenv('GEOFORMA_DATA_DIR',str(root))
     parent=tmp_path/'other';parent.mkdir();target=prepare_resource_parent(parent)
-    busy=ResourceLease();busy.ensure(target);messages=[]
-    monkeypatch.setattr(resources.QMessageBox,'warning',lambda *args:messages.append(args[-1]))
+    busy=ResourceLease();busy.ensure(target)
     try:
         with resource_session() as active:
             assert require_resource_dir()==root

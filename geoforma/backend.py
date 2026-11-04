@@ -9,7 +9,7 @@ from rasterio.transform import Affine
 from shapely.geometry import shape, mapping, box as geometry_box
 from shapely.ops import unary_union
 
-from .domain import data_dir,digest
+from .domain import digest
 from .prompt_bounds import bounded_points,bounded_mask,clip_geometry
 from .single_polygon import single_mask,preview_bitmap
 

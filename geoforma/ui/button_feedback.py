@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget,QAbstractButton,QCheckBox,QRadioButton,QD
     QToolButton,QPushButton,QTabBar,QAbstractSpinBox,QStyle,QStyleOptionButton,QStyleOptionSpinBox)
 
 COLORS={'normal':'#168F93','primary':'#64DBC4','import':'#087F88','danger':'#CE4F60',
-        'toggle':'#208FA6','navigation':'#557CA8','dialog':'#8871AF','cancel':'#788B99','candidate':'#C1913E'}
+        'toggle':'#208FA6','navigation':'#557CA8','dialog':'#8871AF','cancel':'#788B99'}
 
 
 def feedback_kind(button):

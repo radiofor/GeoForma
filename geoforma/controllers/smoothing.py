@@ -22,9 +22,9 @@ class SmoothingWorkflow:
 
     def smoothing_sources(self,labels,draft):
         # Include hidden confirmed labels so a display filter cannot change topology.
-        if self.candidate_index:
-            saved,candidates=self.candidate_index.visible({})
-            live={l['id'] for l in self.current_batch_labels()};sources=[l for l in saved+candidates if l['id'] in live]
+        if self.label_index:
+            saved=self.label_index.visible({})
+            live={l['id'] for l in self.current_labels()};sources=[l for l in saved if l['id'] in live]
         else:sources=list(labels)
         from ..editing_state import batch_labels
         sources=batch_labels(sources,self.draft)

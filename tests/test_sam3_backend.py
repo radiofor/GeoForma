@@ -24,9 +24,7 @@ def test_sam3_uses_requested_mirror_and_safe_weight_validation(tmp_path,monkeypa
 
 
 def test_sam3_cache_preserves_official_feature_dimensions(tmp_path,monkeypatch):
-    import geoforma.sam3_backend as module
-    import geoforma.sam2_backend as base
-    monkeypatch.setattr(module,'data_dir',lambda:tmp_path);monkeypatch.setattr(base,'data_dir',lambda:tmp_path)
+    monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path))
     backend=Sam3Backend();backend.config={'variant':'interactive','weights_sha256':'test','device':'cpu'}
     sizes=[(4,4),(2,2),(1,1)];calls=[]
     model=SimpleNamespace(hidden_dim=2,device='cpu',no_mem_embed=torch.zeros((1,1,2)),

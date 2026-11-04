@@ -85,30 +85,23 @@ def test_rapid_value_changes_publish_only_latest_and_modes_stay_independent(smoo
     assert not errors
 
 
-def test_legacy_fractional_settings_are_migrated_to_the_displayed_pixels(smooth_workbench,tmp_path):
-    w,app,wait,errors=smooth_workbench
-    project=copy.deepcopy(w.project)
-    project['smoothing']={'individual':{'enabled':False,'value':.5},'automatic':{'enabled':False,'value':2.5}}
-    path=tmp_path/'legacy.geoforma.json';save_project(project,path)
-    restored=load_project(path)
-    assert restored['smoothing']['individual']['value']==1
-    assert restored['smoothing']['automatic']['value']==3
-    w.project=restored;w.sync_smoothing_controls()
-    assert w.smooth_value.decimals()==0 and w.smooth_value.minimum()==1 and w.smooth_value.maximum()==5
-    assert w.smooth_value.value()==restored['smoothing']['individual']['value']
-    assert w.smooth_value.text()=='1'
+def test_fractional_project_smoothing_is_rejected(smooth_workbench,tmp_path):
+    w,app,wait,errors=smooth_workbench;project=copy.deepcopy(w.project)
+    project['smoothing']['individual']['value']=.5
+    path=tmp_path/'invalid.gfm';path.write_text(json.dumps(project),encoding='utf-8')
+    with pytest.raises(ValueError,match='整数像素'):load_project(path)
 
 
 def test_project_file_materializes_checkbox_state_and_preserves_sources(smooth_workbench,tmp_path):
     w,app,wait,errors=smooth_workbench;raw=copy.deepcopy(w.project['labels'])
-    w.project['labels'].append(label('other',box(20,20,80,80),'automatic'))
+    w.project['labels'].append(label('other',box(160,20,220,80)))
     w.smooth_enabled.setChecked(True);settled(w,app)
-    snapshot=project_snapshot(w.project);path=tmp_path/'smooth.geoforma.json';save_project(snapshot,path)
+    snapshot=project_snapshot(w.project);path=tmp_path/'smooth.gfm';save_project(snapshot,path)
     data=json.loads(path.read_text(encoding='utf-8'))
     assert not shape(data['labels'][0]['geometry']).equals(shape(raw[0]['geometry']))
     assert shape(data['labels'][0]['source_geometry']).equals(shape(raw[0]['geometry']))
-    assert not shape(data['labels'][2]['geometry']).equals(box(20,20,80,80))
-    assert shape(data['labels'][2]['source_geometry']).equals(box(20,20,80,80))
+    assert not shape(data['labels'][2]['geometry']).equals(box(160,20,220,80))
+    assert shape(data['labels'][2]['source_geometry']).equals(box(160,20,220,80))
     restored=load_project(path)
     assert shape(restored['labels'][0]['geometry']).equals(shape(raw[0]['geometry']))
     assert settings(restored,'individual')['enabled']
@@ -134,7 +127,7 @@ def test_crs_rows_and_export_text_are_centered(smooth_workbench):
     w.refresh_info();values=[v.text() for v in w.image_info.values]
     assert values[1]=='EPSG:3857' and 'Pseudo-Mercator' in values[2]
     assert w.export_crs_input.alignment()==Qt.AlignmentFlag.AlignCenter
-    assert not hasattr(w,'export_kind')
+    assert w.export_kind.itemData(0,Qt.ItemDataRole.TextAlignmentRole)==Qt.AlignmentFlag.AlignCenter
     for row in range(w.labels_table.rowCount()):
         for column in range(2):assert w.labels_table.item(row,column).textAlignment()==Qt.AlignmentFlag.AlignCenter
 
@@ -160,13 +153,14 @@ def test_vector_files_match_checkbox_state(smooth_workbench,raster_image,tmp_pat
     from rasterio.warp import transform_geom
     from shapely.affinity import affine_transform
     w,app,wait,errors=smooth_workbench;raster_image['id']='one'
+    w.export_kind.setCurrentIndex(w.export_kind.findData('.'+extension))
     if extension=='shp':w.export_label_field_input.setText('class_val');w.commit_export_label_field()
     w.project['images']=[raster_image];w.image=raster_image;w.project['labels']=[label('a',box(20,20,80,80))];w.refresh_images();w.refresh_info();w.refresh_labels();wait()
     for enabled in (True,False):
         w.smooth_enabled.setChecked(enabled);settled(w,app)
         path=tmp_path/f'labels_{int(enabled)}.{extension}'
         monkeypatch.setattr(QFileDialog,'getSaveFileName',lambda *args:(str(path),''))
-        w.export('gpkg');wait();assert path.is_file() and not errors
+        w.export();wait();assert path.is_file() and not errors
         store=ogr.Open(str(path));feature=store.GetLayer().GetNextFeature();geometry=json.loads(feature.GetGeometryRef().ExportToJson());assert feature.GetField('smooth_px')==float(enabled);store=None
         if extension=='geojson':geometry=transform_geom('EPSG:4326','EPSG:3857',geometry)
         from rasterio.transform import Affine

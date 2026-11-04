@@ -7,7 +7,7 @@ ui/progress_bar.TaskProgressBar：唯一 QProgressBar 实现；浅色工作台�
 ui/task_progress.TaskProgressPresentation：把进度模型映射为工作台任务名称、计数、阶段与操作位。
 task_status：任务种类名称和各阶段计数单位，不根据任意文件名猜测任务类型。
 ui/loading_button：导入按钮订阅同一个进度模型，不另建任务状态。
-ui/background_activity：显示、候选索引、平滑、自动保存等后台活动的独立汇总。
+ui/background_activity：显示、标签索引、平滑、自动保存等后台活动的独立汇总。
 
 工作台固定位置
 从左到右：任务名称、当前序号/总数、进度条、取消或终态、阶段与文件、后台活动、编辑状态。
@@ -49,4 +49,3 @@ ui/background_activity：显示、候选索引、平滑、自动保存等后台�
 tests/test_progress_model.py、test_status_completion.py、test_task_identity.py。
 tests/test_project_loading.py、test_import_animation.py、test_runtime_dialog.py。
 tests/test_startup.py、test_shutdown_feedback.py、test_background_activity.py。
-本轮完整检查及验证范围见 MODULAR_AUDIT_2026_10_23.txt。

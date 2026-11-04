@@ -5,14 +5,14 @@ PROMPT_TOOLS=frozenset(('positive','negative','box','select_points'))
 
 
 def compatible_tool(tool,mode):
-    return isinstance(tool,str) and tool in TOOLS and mode in ('individual','automatic')
+    return isinstance(tool,str) and tool in TOOLS and mode=='individual'
 
 
 def restored_tool(preferred,current,mode):
     """Temporary busy/ready/manual states disable tools without replacing choices."""
     for tool in (preferred,current):
         if compatible_tool(tool,mode):return tool
-    return 'select' if mode=='automatic' else 'pan'
+    return 'pan'
 
 
 def available_tools(window):

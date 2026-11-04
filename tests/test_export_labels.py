@@ -31,7 +31,7 @@ def test_category_defaults_increment_and_custom_values_do_not_change_references(
     assert project['classes']==original
     project['classes'],project['next_class_id'],_=dialog.value();project['export_label_field']='landcover'
     snapshot=project_snapshot(project);project['classes'][0]['value']=9
-    path=tmp_path/'labels.geoforma.json';save_project(snapshot,path);loaded=load_project(path)
+    path=tmp_path/'labels.gfm';save_project(snapshot,path);loaded=load_project(path)
     assert loaded['classes']==snapshot['classes'] and loaded['classes'][0]['value']==8
     assert loaded['export_label_field']=='landcover'
     dialog.reject();dialog.deleteLater();app.processEvents()
@@ -67,7 +67,7 @@ def test_new_category_still_works_after_user_selects_the_highest_value():
 
 def test_legacy_project_without_export_values_keeps_original_codes(tmp_path):
     project=new_project();project.pop('export_label_field');project['classes']=[dict(id=7,name='湖泊')]
-    path=tmp_path/'legacy.geoforma.json';path.write_text(json.dumps(project),encoding='utf-8')
+    path=tmp_path/'legacy.gfm';path.write_text(json.dumps(project),encoding='utf-8')
     loaded=load_project(path)
     assert class_value(loaded['classes'][0])==7 and label_field(loaded)=='class_value'
 
@@ -86,13 +86,34 @@ def test_vector_files_store_custom_field_and_value(source,tmp_path,ext,field):
         assert metadata['label_field']==field and metadata['classes']==classes and metadata['labels'][0]['class_id']==7
 
 
-def test_default_field_uses_custom_value_and_unclassified_candidates_stay_null(source,tmp_path):
+def test_candidate_cannot_replace_existing_vector_export(source,tmp_path):
     labels=labels_for(source);labels.append(dict(labels[0],id='candidate',class_id=None,status='candidate',geometry=mapping(box(50,40,60,50))))
-    path=tmp_path/'defaults.gpkg';export_vector(source,labels,path,'',Task(),[dict(id=7,name='湖泊',value=42)])
-    ds=ogr.Open(str(path));layer=ds.GetLayer(0)
-    assert layer.GetNextFeature().GetField('class_value')==42
-    assert layer.GetNextFeature().GetField('class_value') is None
+    path=tmp_path/'defaults.gpkg';path.write_bytes(b'existing')
+    with pytest.raises(ValueError,match='只能导出已保存'):
+        export_vector(source,labels,path,'',Task(),[dict(id=7,name='湖泊',value=42)])
+    assert path.read_bytes()==b'existing'
+
+
+def test_default_label_field_exports_shapefile_without_manual_rename(source,tmp_path):
+    path=tmp_path/'default.shp';export_vector(source,labels_for(source),path,'',Task(),[dict(id=7,name='湖泊',value=42)])
+    ds=ogr.Open(str(path));feature=ds.GetLayer(0).GetNextFeature()
+    assert feature.GetField('class_val')==42
     ds=None
+    assert json.loads(path.with_suffix('.metadata.json').read_text(encoding='utf-8'))['label_field']=='class_val'
+
+
+@pytest.mark.parametrize('change,message',[
+    ({'class_id':None},'有效类别'),({'class_id':True},'有效类别'),
+    ({'image_id':'another-image'},'当前影像'),({'status':'draft'},'只能导出已保存'),
+    ({'geometry':mapping(box(-1,5,10,20))},'超出当前影像范围')])
+@pytest.mark.parametrize('kind',['vector','raster'])
+def test_invalid_labels_do_not_replace_exports(source,tmp_path,change,message,kind):
+    labels=labels_for(source);labels[0].update(change)
+    path=tmp_path/('existing.gpkg' if kind=='vector' else 'existing.tif');path.write_bytes(b'existing')
+    with pytest.raises(ValueError,match=message):
+        if kind=='vector':export_vector(source,labels,path,'',Task())
+        else:export_raster(source,labels,path,Task())
+    assert path.read_bytes()==b'existing'
 
 
 def test_raster_uses_custom_values_and_keeps_unlabeled_nodata_and_grid(source,tmp_path):
@@ -139,7 +160,53 @@ def test_export_workflow_passes_field_and_values_to_writer(workbench,source,tmp_
     w.project['classes']=[dict(id=7,name='湖泊',value=42)]
     w.project['labels']=[dict(labels_for(source)[0],annotation_mode='individual')]
     path=tmp_path/'workflow.geojson';w.export_label_field_input.setText('landcover')
+    w.export_kind.setCurrentIndex(w.export_kind.findData('.geojson'))
     monkeypatch.setattr('geoforma.controllers.exports.QFileDialog.getSaveFileName',lambda *args:(str(path),'GeoJSON (*.geojson)'))
-    w.export('gpkg');wait()
+    w.export();wait()
     feature=json.loads(path.read_text(encoding='utf-8'))['features'][0]
     assert feature['properties']['landcover']==42 and w.project['labels'][0]['class_id']==7 and not errors
+
+
+@pytest.mark.parametrize('suffix,driver,filter_text',[
+    ('.gpkg','GPKG','*.gpkg'),('.shp','ESRI Shapefile','*.shp'),('.geojson','GeoJSON','*.geojson'),
+])
+def test_format_selector_controls_dialog_and_actual_output(workbench,source,tmp_path,monkeypatch,suffix,driver,filter_text):
+    from osgeo import ogr
+    w,app,wait,errors=workbench;w.image=source;w.project['images']=[source]
+    w.project['classes']=[dict(id=7,name='湖泊',value=42)]
+    w.project['labels']=[dict(labels_for(source)[0],annotation_mode='individual')]
+    w.export_kind.setCurrentIndex(w.export_kind.findData(suffix));dialog=[]
+    def save_dialog(*args):
+        dialog.append(args);return str(tmp_path/'selected'),''
+    monkeypatch.setattr('geoforma.controllers.exports.QFileDialog.getSaveFileName',save_dialog)
+    w.export();wait()
+    path=tmp_path/('selected'+suffix);dataset=ogr.Open(str(path))
+    assert dataset is not None and dataset.GetDriver().GetName()==driver
+    assert filter_text in dialog[0][3] and dialog[0][2].endswith(suffix) and not errors
+    dataset=None
+
+
+def test_changed_extension_does_not_overwrite_without_confirmation(workbench,source,tmp_path,monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    w,app,wait,errors=workbench;w.image=source;w.project['images']=[source]
+    w.project['labels']=[dict(labels_for(source)[0],annotation_mode='individual')]
+    target=tmp_path/'selected.gpkg';target.write_bytes(b'keep')
+    monkeypatch.setattr('geoforma.controllers.exports.QFileDialog.getSaveFileName',lambda *args:(str(tmp_path/'selected.shp'),''))
+    asked=[]
+    monkeypatch.setattr(QMessageBox,'question',lambda *args:(asked.append(args) or QMessageBox.StandardButton.No))
+    w.export();assert len(asked)==1 and target.read_bytes()==b'keep' and w.task is None and not errors
+
+
+def test_shapefile_export_keeps_source_metadata_without_editing_sessions(workbench,source,tmp_path,monkeypatch):
+    w,app,wait,errors=workbench;w.image=source;w.project['images']=[source]
+    w.project['classes']=[dict(id=7,name='湖泊',value=42)]
+    w.project['labels']=[dict(labels_for(source)[0],annotation_mode='individual')]
+    source['mode_sessions']={'individual':{'draft':{'points':[[10,10,1]]}}}
+    w.export_kind.setCurrentIndex(w.export_kind.findData('.shp'))
+    path=tmp_path/'workflow.shp'
+    monkeypatch.setattr('geoforma.controllers.exports.QFileDialog.getSaveFileName',lambda *args:(str(path),''))
+    w.export();wait()
+    metadata=json.loads(path.with_suffix('.metadata.json').read_text(encoding='utf-8'))
+    assert metadata['source_image']['path']==source['path']
+    assert metadata['source_image']['source_paths']==source['source_paths']
+    assert 'mode_sessions' not in metadata['source_image'] and not errors

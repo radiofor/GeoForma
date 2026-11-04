@@ -22,41 +22,35 @@ class LoadedProject:
     smoothing:object=None
     draft_path:object=None
     overview:object=None
-    nodata_migration_changed:bool=False
-    nodata_model_changed:tuple=()
 
 
-def prepare_project(path,viewport_size,task=None,read_frame=True):
+def prepare_project(path,viewport_size,task=None,read_frame=True,project=None):
     def check():
         if task:task.check()
     def stage(text,current=0,total=0):
         check()
         if task:task.signals.progress.emit(current,total,text)
-    stage('读取项目文件：'+Path(path).name);project=load_project(path)
+    stage('读取项目文件：'+Path(path).name);project=load_project(path) if project is None else project
     from .cache_recovery import remap_migrated_checkpoint
     remap_migrated_checkpoint(project)
-    from .raster import migrate_project_nodata
-    changed,model_changed=migrate_project_nodata(project,check)
     state=project.get('workspace',{})
     image=next((im for im in project['images'] if im['id']==state.get('image_id')),next(iter(project['images']),None))
     mode_index=0;mode='individual';session=(image or {}).get('mode_sessions',{}).get(mode,{})
-    legacy_full=state.get('operation')==1 or state.get('annotation_mode')=='automatic'
-    draft=copy.deepcopy((session.get('draft') if legacy_full else state.get('draft') or session.get('draft')) or {})
+    draft=copy.deepcopy(state.get('draft') or session.get('draft') or {})
     if draft.get('base_id') and not draft.get('seed_geometry'):
         original=next((l for l in project['labels'] if l['id']==draft['base_id']),None)
         if original:draft['seed_geometry']=copy.deepcopy(original['geometry'])
     loaded=LoadedProject(project,image,mode_index,draft,None,navigation=state.get('navigation') or session.get('navigation'),
-                         view_window=state.get('view_window') or session.get('view'),nodata_migration_changed=changed,nodata_model_changed=tuple(model_changed))
+                         view_window=state.get('view_window') or session.get('view'))
     if image is None:
         loaded.index=LabelIndex([]);return loaded
     check()
     labels=[l for l in project['labels'] if l['image_id']==image['id']]
     stage(f'准备标签索引 · {len(labels)} 个目标')
     loaded.index=LabelIndex(labels,task=task)
-    saved,candidates=loaded.index.visible(draft)
+    visible=loaded.index.visible(draft)
     from .rendering.scene_layers import geometry_path
     if draft.get('geometry'):loaded.draft_path=geometry_path(draft['geometry'])
-    visible=saved+candidates
     stage(f'缓存标签轮廓 · {len(visible)} 个目标')
     for i,label in enumerate(visible):
         check();label['_render_path']=geometry_path(label['geometry'])
@@ -65,8 +59,8 @@ def prepare_project(path,viewport_size,task=None,read_frame=True):
     config=settings(project,mode)
     if config['enabled']:
         stage('准备平滑轮廓')
-        saved,candidates=loaded.index.visible({})
-        sources=[l for l in saved+candidates if not (draft.get('geometry') and l['id']==draft.get('base_id'))]
+        saved=loaded.index.visible({})
+        sources=[l for l in saved if not (draft.get('geometry') and l['id']==draft.get('base_id'))]
         if draft.get('geometry'):
             sources.append({'id':'__draft','geometry':draft['geometry'],'box':draft.get('box'),'status':'draft','editing_state':draft.get('editing_state','model'),
                             'model':{'single_polygon':not mode_index and state.get('single_polygon',False)}})

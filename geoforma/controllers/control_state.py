@@ -14,7 +14,7 @@ class ControlState:
         browse=can_browse(self)
         physical_busy=self.task is not None or locked
         busy=(self.task is not None and not background_prefetch(self)) or locked;has=self.image is not None;ready=bool(has and self.image.get('ready',False))
-        controls.enable(self.project_actions['recover'],not busy and not self.autosave_task and not self.project_path and not self.project['images'] and not self.project['labels'] and self.previous_work() is not None)
+        controls.enable(self.project_actions['recover'],not busy and not self.autosave_task and not self.project_path and not self.project['images'] and not self.project['labels'] and not self.project.get('references') and self.previous_work() is not None)
         controls.enable(self.labels_table,not locked)
         controls.enable(self.project_actions['save'],not locked and self.project_path is None)
         for key in ('select','pan'):controls.enable(self.mode_actions[key],not busy)
@@ -27,15 +27,14 @@ class ControlState:
         controls.enable(self.fit_action,has and not locked);controls.enable(self.native_zoom_action,has and not locked)
         controls.enable(self.raw_view_action,not locked)
         controls.enable(self.reprepare_button,has and not physical_busy)
-        self.refresh_export_crs();controls.enable(self.export_crs_input,not busy)
+        self.refresh_export_crs();controls.enable(self.export_crs_input,not busy and self.export_kind.currentData()!='.geojson')
+        controls.enable(self.export_kind,not busy)
         self.refresh_export_label_field();controls.enable(self.export_label_field_input,not busy)
         controls.enable(self.preprocess_button,has and not physical_busy)
         state=self.image.get('preparation_state') if has else None
-        selected_candidate=not self.draft and self.selected_label() and self.selected_label()['status']=='candidate'
-        controls.enable(self.confirm_button,(bool(self.draft.get('geometry')) or bool(selected_candidate)) and not self.draft.get('pending',False) and not busy and self.classes.currentData() is not None)
+        controls.enable(self.confirm_button,bool(self.draft.get('geometry')) and not self.draft.get('pending',False) and not busy and self.classes.currentData() is not None)
         controls.enable(self.classes_button,not busy)
         controls.enable(self.classes,not busy)
-        controls.enable(self.label_filter,browse)
         saved_selection=not self.draft and self.selected_label() and self.selected_label()['status']=='confirmed'
         self.confirm_button.setText('已保存' if saved_selection else ui_text('action.confirm'))
         eligible=self.can_apply_current()
@@ -49,8 +48,6 @@ class ControlState:
         controls.enable(self.undo_prompt_action,not prompt_busy and bool(self.prompt_undo if self.prompt_context() else self.label_undo))
         controls.enable(self.redo_prompt_action,not prompt_busy and bool(self.prompt_redo if self.prompt_context() else self.label_redo))
         controls.enable(self.undo_label_action,bool(self.label_undo or self.prompt_undo and '_label_entries' in self.prompt_undo[-1]) and not busy)
-        controls.enable(self.undo_all_label_action,bool(self.label_undo) and not busy)
-        controls.enable(self.accept_button,len(self.selected_ids)==1 and not busy)
         controls.enable(self.zoom_button,len(self.selected_ids)==1 and browse)
         controls.enable(self.delete_button,bool(self.selected_ids or self.draft.get('base_id')) and not busy)
         controls.enable(self.delete_action,bool(self.selected_points) and not prompt_busy or not busy and bool(self.selected_ids or self.draft.get('base_id')))

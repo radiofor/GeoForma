@@ -112,7 +112,7 @@ def test_management_updates_active_type_without_render_then_removes_active_safel
     assert w.reference_buttons[('vv',references[2]['path'])] is other_button
     assert w.render_generation==generation and w.raster_renderer.reads==reads and not render
     assert w.view.overlay_records['label'] is item and w.view.point_records[0] is point and w.view.box_item is bounds
-    path=tmp_path/'managed.geoforma.json';save_project(w.project,path)
+    path=tmp_path/'managed.gfm';save_project(w.project,path)
     assert [ref['group'] for ref in load_project(path)['references']]==['水体','水体','VV']
     monkeypatch.setattr(ReferenceManagerDialog,'exec',lambda dialog:(dialog.remove() or 1))
     w.reference_manage_action.trigger()

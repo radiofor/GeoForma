@@ -3,7 +3,6 @@ import hashlib,os
 from pathlib import Path
 import torch
 from .backend import SamBackend,atomic_torch
-from .domain import data_dir
 from .model_catalog import model_spec,adapter_schema,sam2_descriptor
 
 

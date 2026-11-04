@@ -29,7 +29,7 @@ def test_manual_vertices_undo_redo_and_branch(workbench):
 def test_reshape_point_redo_survives_reopen(workbench):
     w,app,tmp=workbench;w.begin_reshape(auto=True)
     w.add_reshape_point(18,25);w.add_reshape_point(35,25);w.undo_context()
-    w.project_path=tmp/'redo.geoforma.json';w.save();w.cancel_reshape();w.open_project(w.project_path)
+    w.project_path=tmp/'redo.gfm';w.save();w.cancel_reshape();w.open_project(w.project_path)
     assert w.reshape_session['stroke']==[[18,25]]
     w.redo_context();assert w.reshape_session['stroke']==[[18,25],[35,25]]
     w.undo_context();w.add_reshape_point(40,25);assert not w.reshape_session.get('redo_stroke')
@@ -49,7 +49,7 @@ def test_saved_class_edit_during_draft_can_be_undone_after_reopen(workbench):
     w,app,tmp=workbench;w.project['classes'].append({'id':2,'name':'two'});w.refresh_classes()
     w.draft={'geometry':mapping(box(60,60,70,70)),'pending':False,'points':[]};w.refresh_labels();draft=copy.deepcopy(w.draft)
     w.change_label_class('target',2)
-    w.project_path=tmp/'mixed.geoforma.json';w.save();assert w.open_project(w.project_path)
+    w.project_path=tmp/'mixed.gfm';w.save();assert w.open_project(w.project_path)
     w.undo_context();assert w.project['labels'][0]['class_id']==1 and w.draft['geometry']==json.loads(json.dumps(draft['geometry']))
     w.redo_context();assert w.project['labels'][0]['class_id']==2
     w.clear_draft();w.undo_context();assert w.project['labels'][0]['class_id']==1

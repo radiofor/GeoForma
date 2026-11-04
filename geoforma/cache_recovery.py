@@ -33,15 +33,10 @@ def remap_migrated_path(original, kind, *, preserve_existing=True):
                 if not isinstance(item,str) or '\\' in item:continue
                 relative=PurePosixPath(item)
                 if len(relative.parts)!=2 or relative.parts[0]!=folder or any(p in ('.','..') for p in relative.parts) or relative.is_absolute():continue
-                matches=[relative]
-                if kind=='recoveries' and relative.name.endswith('.autosave'):
-                    matches.append(relative.with_name(relative.name[:-len('.autosave')]))
-                selected=next((candidate for candidate in matches if norm(path)==norm(src.joinpath(*candidate.parts))),None)
-                if selected is not None:
-                    path=dst.joinpath(*selected.parts);break
+                if norm(path)==norm(src.joinpath(*relative.parts)):
+                    path=dst.joinpath(*relative.parts);break
         if norm(path)==norm(original) or path.is_symlink() or path.is_junction() or path.parent.is_symlink() or path.parent.is_junction():return None
-        present=path.is_file() or (kind=='recoveries' and Path(str(path)+'.autosave').is_file())
-        return path if present else None
+        return path if path.is_file() else None
     except (OSError,ValueError,TypeError,AttributeError):return None
 
 

@@ -1,6 +1,6 @@
 """Inference orchestration; contains no Qt objects or process lifecycle code."""
-from ..domain import data_dir, tiles
-from ..raster import read_rgb, fingerprint, validate_grid
+from ..domain import tiles
+from ..raster import read_rgb, validate_source
 from ..contracts import ModelBackend,validate_window
 
 
@@ -32,8 +32,7 @@ class ModelEngine:
 
     def prepare_backend(self,config,image,task):
         task.check();task.signals.progress.emit(0,0,'检查影像引用与模型…')
-        missing=validate_grid(image)
-        current=fingerprint(image['path'])
+        missing,current=validate_source(image)
         if current!=image['fingerprint']:raise ValueError('影像源文件已变化。请重新导入后预处理，避免使用过期缓存。')
         if missing is not None and (image.get('model_recipe') or {}).get('validity_policy')!={'kind':'declared_missing_v1','value':missing}:
             raise ValueError('影像的缺失值处理尚未更新。请重新打开项目或重新设置模型波段后准备影像。')
@@ -120,8 +119,3 @@ class ModelEngine:
         result=self.backend.predict(image,window,rgb,valid,request['points'],request.get('box'),None,request.get('seed'),True,**kwargs)
         task.check();return result
 
-    def automatic(self,image,config,bounds,grid,level,task,guidance=None):
-        raise ValueError('全图分割功能已移除，请逐个标注目标。')
-
-    def guided_automatic(self,image,config,bounds,grid,level,guidance,task):
-        return self.automatic(image,config,bounds,grid,level,task,guidance)

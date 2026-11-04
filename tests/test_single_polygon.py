@@ -114,14 +114,14 @@ def test_unchecked_saves_independent_polygons(workbench):
     assert all(l['geometry']['type']=='Polygon' for l in w.project['labels'])
 
 
-def test_legacy_labels_follow_current_single_polygon_setting(workbench):
+def test_edited_label_follows_current_single_polygon_setting(workbench):
     w,app=workbench;w.single_polygon.setChecked(True)
     category=w.classes.currentData()
-    blocker=dict(id='blocker',image_id='image',class_id=category,status='confirmed',annotation_mode='automatic',geometry=mapping(box(2,0,4,10)))
-    candidate=dict(id='candidate',image_id='image',class_id=category,status='candidate',annotation_mode='automatic',geometry=mapping(box(0,0,10,10)))
-    w.project['labels']=[copy.deepcopy(blocker),candidate]
-    w.draft={'base_id':'candidate','geometry':candidate['geometry'],'pending':False};w.confirm()
-    saved=next(l for l in w.project['labels'] if l['id']=='candidate')
+    blocker=dict(id='blocker',image_id='image',class_id=category,status='confirmed',annotation_mode='individual',geometry=mapping(box(2,0,4,10)))
+    target=dict(id='target',image_id='image',class_id=category,status='confirmed',annotation_mode='individual',geometry=mapping(box(0,0,10,10)))
+    w.project['labels']=[copy.deepcopy(blocker),target]
+    w.draft={'base_id':'target','geometry':target['geometry'],'pending':False};w.confirm()
+    saved=next(l for l in w.project['labels'] if l['id']=='target')
     assert w.project['labels'][0]==blocker
     assert saved['geometry']['type']=='Polygon' and shape(saved['geometry']).area==60
     assert saved['model']['overlap_resolution']['component_policy']=='largest_area'
@@ -130,7 +130,7 @@ def test_legacy_labels_follow_current_single_polygon_setting(workbench):
 def test_option_survives_project_reopen_and_defaults_off_for_legacy(workbench,tmp_path):
     from geoforma.storage import save_project
     w,app=workbench;w.image=None;w.single_polygon.setChecked(True)
-    w.project_path=tmp_path/'single.geoforma.json';w.save()
+    w.project_path=tmp_path/'single.gfm';w.save()
     w.single_polygon.blockSignals(True);w.single_polygon.setChecked(False);w.single_polygon.blockSignals(False)
     w.open_project(w.project_path);assert w.single_polygon.isChecked()
     w.single_polygon.setChecked(False);w.smooth_enabled.setChecked(False);w.save()
@@ -142,7 +142,7 @@ def test_option_survives_project_reopen_and_defaults_off_for_legacy(workbench,tm
 
 
 def test_non_streaming_backend_needs_no_new_argument():
-    from geoforma.services import ModelEngine
+    from geoforma.inference.engine import ModelEngine
     engine=ModelEngine();engine.prepare_backend=lambda *a:None
     engine.window_input=lambda *a:(None,np.ones((1024,1024),bool))
     geometry=mapping(MultiPolygon([box(0,0,10,10),box(20,20,22,22)]))

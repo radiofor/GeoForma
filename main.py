@@ -17,7 +17,7 @@ def configure_runtime():
 
 def main():
     parser=argparse.ArgumentParser(description='GeoForma desktop annotation')
-    parser.add_argument('project',nargs='?',help='GeoForma project JSON')
+    parser.add_argument('project',nargs='?',help='GeoForma project file (.gfm)')
     parser.add_argument('--recover',action='store_true',help='Restore the latest autosave when reopening the project')
     parser.add_argument('--self-test',metavar='REPORT',help='Check the bundled runtime, model, spawn and GIS exports')
     parser.add_argument('--test-device',choices=['cpu','cuda'],default='cpu')

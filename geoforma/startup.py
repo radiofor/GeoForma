@@ -46,14 +46,14 @@ def prepare_startup(progress, check):
         probe.flush()
     check()
     progress(2, '读取应用配置')
+    from .runtime_hardware import HardwareProbe
+    hardware_probe=HardwareProbe()
     from .model_preferences import application_settings,last_model
     settings = application_settings()
     settings.sync()
     if settings.status() != QSettings.Status.NoError:
         raise OSError('无法读取应用配置，请检查当前用户的访问权限。')
     project = new_project(last_model(settings))  # Resolves weights without model loading.
-    from .runtime_hardware import detect_hardware
-    hardware = detect_hardware()
     check()
     progress(3, '准备地理数据组件')
     from PIL import Image  # Initialize Pillow before Qt image rendering and raster workers.
@@ -64,6 +64,9 @@ def prepare_startup(progress, check):
     check()
     progress(4, '加载标注工作台')
     from .window import MainWindow  # Imports only; no widgets, Torch or model execution here.
+    from .ui.panels import imagery,annotation,status  # Import classes on the worker; instantiate on the UI thread.
+    from .ui import image_toolbar,label_table,raster_presenter,reference_switcher,visibility_button
+    hardware=hardware_probe.result(check)
     check()
     return StartupContext(root, project, MainWindow, hardware)
 

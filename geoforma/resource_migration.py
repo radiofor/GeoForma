@@ -3,6 +3,7 @@ import hashlib,os,re,shutil,time
 from pathlib import Path
 from .atomic_io import atomic_json,atomic_target,read_json
 from .domain import data_dir
+from .project_files import RECOVERY_NAME
 from .resource_location import (CONFIG,FOLDER,MARKER,MARKER_CONTENT,current_resource_dir,
                                 default_resource_dir,prepare_resource_parent,require_resource_dir)
 
@@ -77,10 +78,10 @@ def _files(root):
                     if len(parts)!=2 or not any(name==n or name.startswith(n+'.') or name.startswith(Path(n).stem+'.download.') for n in models):continue
                 elif relative=='cache':
                     if len(parts)==2 and name=='active-project.json':pass
-                    elif len(parts)==3 and parts[1] in ('features','automatic') and FILE_PATTERN.fullmatch(name):pass
+                    elif len(parts)==3 and parts[1]=='features' and FILE_PATTERN.fullmatch(name):pass
                     else:continue
                 elif relative=='recovery':
-                    if len(parts)!=2 or name not in ('untitled.geoforma.json','untitled.geoforma.json.autosave'):continue
+                    if len(parts)!=2 or name!=RECOVERY_NAME:continue
                 elif relative=='runtime/exchange':
                     if len(parts)==4 and re.fullmatch(r'worker_[A-Za-z0-9_-]+',parts[2]) and name=='worker.log':pass
                     elif len(parts)==5 and re.fullmatch(r'worker_[A-Za-z0-9_-]+',parts[2]) and re.fullmatch('[a-f0-9]{32}',parts[3]) and name in ('worker.log','input.npz','output.npz'):pass
@@ -116,8 +117,8 @@ def _allowed(name):
     if parts[0]=='models' and len(parts)==2:
         return any(parts[1] in (s['file'],s['file']+'.part',s['file']+'.part.json',s['file']+'.part.invalid',Path(s['file']).stem+'.download.json') for s in MODELS)
     if parts[0]=='cache':
-        return (len(parts)==2 and parts[1]=='active-project.json') or (len(parts)==3 and parts[1] in ('features','automatic') and bool(FILE_PATTERN.fullmatch(parts[2])))
-    if parts[0]=='recovery':return len(parts)==2 and parts[1] in ('untitled.geoforma.json','untitled.geoforma.json.autosave')
+        return (len(parts)==2 and parts[1]=='active-project.json') or (len(parts)==3 and parts[1]=='features' and bool(FILE_PATTERN.fullmatch(parts[2])))
+    if parts[0]=='recovery':return len(parts)==2 and parts[1]==RECOVERY_NAME
     if len(parts)>=4 and parts[:2]==('runtime','exchange') and re.fullmatch(r'worker_[A-Za-z0-9_-]+',parts[2]):
         return (len(parts)==4 and parts[3]=='worker.log') or (len(parts)==5 and bool(re.fullmatch('[a-f0-9]{32}',parts[3])) and parts[4] in ('worker.log','input.npz','output.npz'))
     if len(parts)>=3 and parts[:2]==('runtime','native-v1'):

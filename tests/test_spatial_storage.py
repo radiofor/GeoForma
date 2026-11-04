@@ -61,10 +61,11 @@ def test_window_prompt_coverage_and_scale():
     assert len(list(tiles((0,0,1958,1957),1958,1957)))==9
 
 
-def test_project_roundtrip_backup_and_unconfirmed(source,tmp_path):
-    project=new_project();project['images']=[source];project['labels']=[{'id':'draft','image_id':source['id'],'status':'candidate','class_id':None,'geometry':mapping(box(10,10,20,20))}]
-    path=tmp_path/'project.geoforma.json';save_project(project,path);loaded=load_project(path);assert loaded['images'][0]['path']==source['path'];assert loaded['labels'][0]['class_id'] is None
-    project['name']='changed';save_project(project,path);assert load_project(str(path)+'.bak')['name']=='Untitled'
+def test_project_roundtrip_does_not_create_backup(source,tmp_path):
+    project=new_project();project['images']=[source];project['labels']=[{'id':'saved','image_id':source['id'],'status':'confirmed','class_id':1,'geometry':mapping(box(10,10,20,20))}]
+    path=tmp_path/'project.gfm';save_project(project,path);loaded=load_project(path);assert loaded['images'][0]['path']==source['path'];assert loaded['labels'][0]['id']=='saved'
+    project['name']='changed';save_project(project,path)
+    assert load_project(path)['name']=='changed' and not Path(str(path)+'.bak').exists()
 
 
 def test_cancel_keeps_existing_export(source,tmp_path):

@@ -8,7 +8,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QMessageBox
 from ..tasks import Task
 from ..theme import set_tone
-from ..domain import digest,data_dir
+from ..domain import digest
 from ..task_status import visible_detail
 from ..ui.modal import dialog_result
 
@@ -206,7 +206,6 @@ class TaskWorkflow:
         if not self.last_error and self.auto_apply.isChecked() and self.draft.get('pending'):self.auto_apply_timer.start()
         if self.closing:QTimer.singleShot(0,self.close)
         else:
-            if self.pending_review is not None:self.refresh_labels()
             QTimer.singleShot(0,self.pump_preparation)
 
     def cancel(self):

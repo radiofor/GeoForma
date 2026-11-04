@@ -33,8 +33,8 @@ def main():
     results.update(offline_dependencies_installed=True,execution='native')
     report=qa/'installed-self-test.json';subprocess.run([str(destination/'GeoForma.exe'),'--self-test',str(report),*(['--test-core-only'] if optional else [])],env=env,check=True,timeout=300)
     assert json.loads(report.read_text())['ok'];results['installed_core_self_test' if optional else 'installed_offline_self_test']=True
-    project=destination/'retained.geoforma.json';project.write_text('user project')
-    recovery=data/'recovery/project.geoforma.json';recovery.parent.mkdir(exist_ok=True);recovery.write_text('recovery')
+    project=destination/'retained.gfm';project.write_text('user project')
+    recovery=data/'recovery/project.gfm';recovery.parent.mkdir(exist_ok=True);recovery.write_text('recovery')
     model=data/'models/user_model.pth';model.parent.mkdir(exist_ok=True);model.write_bytes(b'user model')
     feature=data/'cache/features'/('a'*64+'.pt');feature.parent.mkdir(parents=True,exist_ok=True);feature.write_bytes(b'cached')
     uninstall=next(destination.glob('unins*.exe'));subprocess.run([str(uninstall),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG='+str(qa/'uninstall.log')],env=env,check=True,timeout=600)

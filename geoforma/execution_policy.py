@@ -16,7 +16,6 @@ def native_available(family):
 
 
 def resolve_execution(config):
-    # Old project preferences are normalized to auto before reaching this point.
     requested=config.get('execution','auto')
     if requested not in ('auto','native'):raise ValueError('GeoForma 仅支持 Windows 原生运行环境。')
     model_spec(config['variant'],config.get('backend','sam'))

@@ -121,7 +121,7 @@ def test_manual_reshape_is_saved_beyond_earlier_prompt_box(workbench):
     assert saved['editing_state']=='manual' and saved['box']==[20,20,30,30]
     assert shape(saved['geometry']).covers(Point(25.5,32.5))
     from geoforma.storage import save_project,load_project
-    project_path=tmp/'manual-box.geoforma.json';save_project(w.project,project_path)
+    project_path=tmp/'manual-box.gfm';save_project(w.project,project_path)
     restored=load_project(project_path)['labels'][0]
     assert restored['editing_state']=='manual' and shape(restored['geometry']).covers(Point(25.5,32.5))
 
@@ -144,7 +144,7 @@ def test_manual_class_save_and_model_changes_preserve_lock(workbench):
 
 def test_manual_lock_and_undo_survive_project_reopen(workbench):
     w,app,tmp=workbench;original=copy.deepcopy(w.project['labels'][0]);prepare_preview(w);w.commit_reshape();w.confirm()
-    w.project_path=tmp/'manual.geoforma.json';w.save();w.open_project(w.project_path);w.select_label('target');w.edit_selected(locate=False)
+    w.project_path=tmp/'manual.gfm';w.save();w.open_project(w.project_path);w.select_label('target');w.edit_selected(locate=False)
     assert w.model_prompts_locked() and w.project['labels'][0]['editing_state']=='manual'
     w.undo_context();assert json.loads(json.dumps(w.project['labels'][0]))==json.loads(json.dumps(original))
     w.redo_context();assert w.project['labels'][0]['editing_state']=='manual'
@@ -153,7 +153,7 @@ def test_manual_lock_and_undo_survive_project_reopen(workbench):
 def test_incomplete_stroke_recovers_and_cancel_does_not_change_label(workbench):
     w,app,tmp=workbench;original=copy.deepcopy(w.project['labels']);w.begin_reshape()
     w.add_reshape_point(22,28);w.add_reshape_point(22,34)
-    stroke=copy.deepcopy(w.reshape_session['stroke']);w.project_path=tmp/'draft.geoforma.json';w.save()
+    stroke=copy.deepcopy(w.reshape_session['stroke']);w.project_path=tmp/'draft.gfm';w.save()
     w.cancel_reshape();w.open_project(w.project_path)
     assert w.reshape_session and w.reshape_session['stroke']==stroke and json.loads(json.dumps(w.project['labels']))==json.loads(json.dumps(original))
     w.cancel_reshape();assert json.loads(json.dumps(w.project['labels']))==json.loads(json.dumps(original))
@@ -172,7 +172,7 @@ def test_async_finish_clears_stroke_without_saving_or_running_sam(workbench):
 
 
 def test_service_rejects_manual_model_requests_before_loading():
-    from geoforma.services import ModelEngine
+    from geoforma.inference.engine import ModelEngine
     engine=ModelEngine();engine.prepare_backend=lambda *args:pytest.fail('Must reject before model load')
     for call in (engine.predict,engine.preview):
         with pytest.raises(ValueError,match='人工编辑'):call({}, {}, {'editing_state':'manual'},None)
@@ -197,11 +197,11 @@ def test_mouse_drawing_backspace_preview_and_save(workbench):
     assert w.project['labels'][0]['editing_state']=='manual'
 
 
-def test_full_mode_reshape_stays_independent(workbench):
+def test_reshape_of_selected_label_preserves_another_label(workbench):
     w,app,tmp=workbench;original=copy.deepcopy(w.project['labels'][0])
-    automatic=dict(copy.deepcopy(original),id='automatic',annotation_mode='automatic')
-    w.project['labels'].append(automatic);w.select_label('automatic')
+    other=dict(copy.deepcopy(original),id='other',annotation_mode='individual')
+    w.project['labels'].append(other);w.select_label('other')
     prepare_preview(w);w.commit_reshape();w.confirm()
     assert w.project['labels'][0]==original
-    edited=next(l for l in w.project['labels'] if l['id']=='automatic');assert edited['editing_state']=='manual'
+    edited=next(l for l in w.project['labels'] if l['id']=='other');assert edited['editing_state']=='manual'
     w.select_label('target');assert not w.model_prompts_locked()

@@ -20,21 +20,11 @@ def test_explicit_old_backend_cannot_start():
         resolve_execution(dict(backend='sam',variant='vit_b',execution='wsl'))
 
 
-def test_legacy_project_uses_auto_without_changing_label_provenance(tmp_path):
+def test_project_rejects_removed_runtime(tmp_path):
     from geoforma.storage import load_project
-    from geoforma.workflow import fully_prepared,preparation_signature
-    from shapely.geometry import box,mapping
     project=new_project();project['model']['execution']='wsl'
-    project['images']=[dict(id='image',path='source.tif',name='source.tif',width=10,height=10,transform=[1,0,0,0,-1,10],bands=3,dtypes=['uint8'],crs='EPSG:3857',fingerprint='legacy',source_files=1)]
-    project['images'][0]['ready']=True
-    project['images'][0]['prepared_full_signature']=preparation_signature(project['images'][0],project['model'])
-    project['labels']=[dict(id='saved',image_id='image',model={'execution':'wsl'},status='confirmed',geometry=mapping(box(1,1,5,5)))]
-    path=tmp_path/'legacy.geoforma.json';path.write_text(json.dumps(project),encoding='utf-8')
-    loaded=load_project(path)
-    assert loaded['model']['execution']=='auto'
-    assert fully_prepared(loaded['images'][0],loaded['model'])
-    assert loaded['labels'][0]['model']==project['labels'][0]['model']
-    assert loaded['labels'][0]['annotation_mode']=='individual'
+    path=tmp_path/'invalid.gfm';path.write_text(json.dumps(project),encoding='utf-8')
+    with pytest.raises(ValueError,match='模型配置无效'):load_project(path)
 
 
 def test_model_dialog_has_no_runtime_selector():

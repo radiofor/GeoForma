@@ -24,7 +24,7 @@ def checked_directory(root,relative):
 
 def clear_image_cache(root):
     root=Path(root).resolve();removed=[];size=0
-    for relative in ('cache/features','cache/automatic'):
+    for relative in ('cache/features',):
         target=checked_directory(root,relative)
         if not target.exists():continue
         for path in target.iterdir():
@@ -49,7 +49,7 @@ def prune_abandoned_cache_temps(root,now=None):
     """Only call after the old model writer stops; completed features stay intact."""
     root=Path(root).resolve();cutoff=(time.time() if now is None else now)-TEMP_MAX_AGE
     removed=[];size=0
-    for relative in ('cache/features','cache/automatic'):
+    for relative in ('cache/features',):
         try:
             folder=checked_directory(root,relative)
             if not folder.is_dir():continue

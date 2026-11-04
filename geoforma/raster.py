@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from stat import S_ISREG
 import numpy as np
 import rasterio
 from rasterio.windows import Window
@@ -13,8 +14,10 @@ def _source_fingerprint(names):
     files=[]
     for name in sorted(names):
         path=Path(name)
-        if not path.is_file():raise FileNotFoundError(f"影像或 VRT 引用不可访问：{name}")
-        stamp=path.stat();files.append((str(path.resolve()),stamp.st_size,stamp.st_mtime_ns))
+        try:stamp=path.stat()
+        except OSError as error:raise FileNotFoundError(f"影像或 VRT 引用不可访问：{name}") from error
+        if not S_ISREG(stamp.st_mode):raise FileNotFoundError(f"影像或 VRT 引用不可访问：{name}")
+        files.append((str(path.resolve()),stamp.st_size,stamp.st_mtime_ns))
     return digest(files)
 
 
@@ -25,7 +28,7 @@ def fingerprint(source):
 def inspect_source(path):
     path = str(Path(path).resolve())
     with rasterio.open(path) as ds:
-        stamp=_source_fingerprint(ds.files)
+        source_files=ds.files;stamp=_source_fingerprint(source_files)
         colors = [c.name for c in ds.colorinterp]
         rgb = [colors.index(c)+1 for c in ("red", "green", "blue")] if all(c in colors for c in ("red", "green", "blue")) else None
         if ds.count == 1:
@@ -34,8 +37,8 @@ def inspect_source(path):
                 "bands": ds.count, "dtypes": list(ds.dtypes), "colors": colors, "crs": ds.crs.to_string() if ds.crs else "",
                 "assigned_crs": "", "transform": list(ds.transform)[:6], "nodata": ds.nodata if ds.nodata is None or np.isfinite(ds.nodata) else "NaN",
                 "fingerprint": stamp, "model_recipe": None, "display_recipe": None,
-                "suggested_bands": rgb, "ready": False, "source_files": len(ds.files),
-                "source_paths": [str(Path(name).resolve()) for name in ds.files]}
+                "suggested_bands": rgb, "ready": False, "source_files": len(source_files),
+                "source_paths": [str(Path(name).resolve()) for name in source_files]}
 
 
 def make_recipe(image, bands,minimum_span=1.,relative_span=0.,missing_value=None):
@@ -64,32 +67,6 @@ def mark_recipe_policy(image,recipe):
     from .nodata import declared_missing_value,tagged_recipe
     with rasterio.open(image['path']) as source:missing_value=declared_missing_value(source)
     return tagged_recipe(recipe,missing_value)
-
-
-def migrate_project_nodata(project,check=lambda:None):
-    """Update old recipes only where the source explicitly declares missing values."""
-    from .nodata import declared_missing_value,tagged_recipe
-    changed=False;model_changed=[]
-    for image in project['images']:
-        check()
-        if image.get('bands')!=1 or not (image.get('model_recipe') or image.get('display_recipe')):continue
-        try:
-            with rasterio.open(image['path']) as source:missing=declared_missing_value(source)
-            if missing is None:continue
-            for name in ('model_recipe','display_recipe'):
-                old=image.get(name)
-                if not old:continue
-                new=tagged_recipe(old,missing)
-                if old.get('ranges') and any(lo<=missing<=hi for lo,hi in old['ranges']):
-                    new['ranges']=make_recipe(image,old['bands'],missing_value=missing)['ranges']
-                if new==old:continue
-                image[name]=new;changed=True
-                if name=='model_recipe':
-                    model_changed.append(image['id']);image['ready']=False
-                    image.pop('prepared_full_signature',None);image.pop('prepared_cache_revision',None)
-                    image.pop('preparation_state',None)
-        except (OSError,ValueError):continue
-    return changed,model_changed
 
 
 def read_rgb(image, window, recipe=None, max_size=None):
@@ -123,23 +100,40 @@ def read_rgb(image, window, recipe=None, max_size=None):
                         data=ds.read(band,window=read_window,out_shape=size,
                             resampling=Resampling.bilinear if max_size else Resampling.nearest)
                         valid[area] &= (ds.read_masks(band,window=read_window,out_shape=size)>0) & np.isfinite(data)
+                    rendered={}
                     for channel,selected in enumerate(recipe['bands']):
                         if selected!=band:continue
                         lo,hi=recipe['ranges'][channel]
+                        if (lo,hi) in rendered:
+                            out[oy0:oy1,ox0:ox1,channel]=out[oy0:oy1,ox0:ox1,rendered[(lo,hi)]]
+                            continue
                         values=data.astype(np.float32)
                         np.nan_to_num(values,copy=False,nan=lo,posinf=hi,neginf=lo)
                         np.subtract(values,lo,out=values);np.multiply(values,255./(hi-lo),out=values)
                         np.clip(values,0,255,out=values)
                         out[oy0:oy1,ox0:ox1,channel]=values.astype(np.uint8)
+                        rendered[(lo,hi)]=channel
                         del values
                     del data
     out[~valid]=0
     return out,valid
 
 
-def validate_grid(image):
+def validate_grid_dataset(source,image):
+    """Validate an already open dataset, returning its declared missing value."""
     from .nodata import declared_missing_value
+    if source.width != image["width"] or source.height != image["height"] or list(source.transform)[:6] != image["transform"] or (source.crs.to_string() if source.crs else '') != image['crs']:
+        raise ValueError("原始影像网格已改变，不能安全复用此项目的像元标签。")
+    return declared_missing_value(source)
+
+
+def validate_grid(image):
     with rasterio.open(image["path"]) as ds:
-        if ds.width != image["width"] or ds.height != image["height"] or list(ds.transform)[:6] != image["transform"] or (ds.crs.to_string() if ds.crs else '') != image['crs']:
-            raise ValueError("原始影像网格已改变，不能安全复用此项目的像元标签。")
-        return declared_missing_value(ds)
+        return validate_grid_dataset(ds,image)
+
+
+def validate_source(image):
+    """Check the grid and compute the source fingerprint with one dataset open."""
+    with rasterio.open(image['path']) as ds:
+        missing=validate_grid_dataset(ds,image)
+        return missing,_source_fingerprint(ds.files)

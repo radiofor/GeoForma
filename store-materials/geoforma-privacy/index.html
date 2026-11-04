@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GeoForma 隐私政策：本地影像处理、模型推理、资源下载、本地数据与隐私反馈。">
+  <meta name="color-scheme" content="light">
+  <title>GeoForma 隐私政策</title>
+  <style>
+    :root { --ink: #1d343e; --muted: #526872; --accent: #087c83; --line: #dce7e9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f3f7f7; color: var(--ink); font: 16px/1.9 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    .page { max-width: 940px; margin: 40px auto; padding: 0 24px; }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; color: var(--accent); font-size: 19px; font-weight: 700; letter-spacing: .02em; }
+    .mark { width: 14px; height: 14px; background: var(--accent); border-radius: 3px; transform: rotate(45deg); }
+    article { background: white; border: 1px solid var(--line); border-radius: 16px; padding: 40px 48px; box-shadow: 0 12px 40px rgb(22 62 67 / 4%); }
+    header { padding-bottom: 24px; border-bottom: 1px solid var(--line); margin-bottom: 28px; }
+    h1 { font-size: clamp(27px, 4vw, 36px); line-height: 1.35; margin: 0 0 16px; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 4px 20px; color: var(--muted); font-size: 14px; }
+    .summary { margin: 22px 0 0; }
+    h2 { font-size: 20px; line-height: 1.5; margin: 30px 0 12px; color: #175d66; }
+    p { margin: 0 0 15px; overflow-wrap: anywhere; }
+    a { color: #006f79; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { color: #004e57; }
+    a:focus-visible { outline: 3px solid #71bac0; outline-offset: 3px; border-radius: 2px; }
+    code { padding: 2px 5px; background: #f0f5f6; border-radius: 4px; font-size: .92em; overflow-wrap: anywhere; }
+    footer { margin: 24px 2px; color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+    @media (max-width: 640px) { .page { margin: 22px auto; padding: 0 14px; } article { padding: 26px 22px; border-radius: 12px; } h2 { font-size: 19px; } }
+    @media print { body { background: white; } .page { max-width: none; margin: 0; padding: 0; } article { border: 0; box-shadow: none; padding: 0; } footer { display: none; } h2 { break-after: avoid; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="brand"><span class="mark" aria-hidden="true"></span>GeoForma</div>
+    <article>
+      <header>
+        <h1>GeoForma 隐私政策</h1>
+        <div class="meta"><span>生效及更新日期：2026 年 11 月 4 日</span><span>适用版本：GeoForma 1.0.5</span><span>开发者：Viktor Xu（GitHub：radiofor）</span></div>
+        <p class="summary">GeoForma 是一款在 Windows 上运行的地理影像标注工具。本政策说明软件如何处理您选择的文件、在本地生成的数据，以及资源下载和反馈过程中涉及的信息。</p>
+      </header>
+      <section aria-labelledby="local"><h2 id="local">1. 本地文件与模型推理</h2>
+        <p>GeoForma 根据您的操作读取影像、参考影像、VRT、项目和模型资源，用于影像显示、提示交互、模型推理、轮廓编辑与标签导出。</p>
+        <p>影像与标签可能包含地理位置、空间范围或其他敏感内容；项目文件也可能包含文件路径、标注、提示点、模型配置及工作状态。这些内容在您的设备上处理。GeoForma 不会自动将导入的影像、标签、项目或特征缓存上传给开发者，也不通过云端推理服务处理这些内容。</p>
+        <p>GeoForma 自身不要求您注册或登录应用账户。本地标注功能不包含广告、用户行为统计或自动远程崩溃上报。</p>
+      </section>
+      <section aria-labelledby="storage"><h2 id="storage">2. 本地保存、缓存与日志</h2>
+        <p>您保存的项目和导出结果写入您选择的位置。软件还会在本机保存模型偏好、恢复记录、下载资源、特征缓存，以及用于排查故障的日志。</p>
+        <p>缓存可能包含由影像生成的派生数据；恢复记录与日志可能包含文件路径、模型或设备信息、处理状态及异常信息。这些文件默认保留在本机，不会自动发送给开发者。</p>
+        <p>普通安装版默认数据目录为 <code>%LOCALAPPDATA%/GeoForma</code>；商店安装方式或自定义配置可能影响实际位置。您可在“设置 → 资源配置 → 更多 → 打开资源文件夹”查看资源目录。</p>
+      </section>
+      <section aria-labelledby="network"><h2 id="network">3. 联网与第三方资源</h2>
+        <p>在配置或加载所需资源时，GeoForma 可以从 PyTorch、Meta、Hugging Face 镜像等提供方及其分发服务下载运行库或模型权重。下载连接采用 HTTPS，资源配置会核对清单中的文件大小及 SHA256。您也可以直接导入已有本地文件。</p>
+        <p>资源提供方会收到完成连接所需的 IP 地址、请求的资源路径、客户端请求标识和下载续传范围等网络信息；其日志记录和保存方式由相应服务提供方决定。GeoForma 不会把您的影像、标签、项目或特征缓存附加到这些下载请求。</p>
+        <p>用户主动打开官方网站或其他外部链接时，将由浏览器访问相应服务。文件引用、共享路径或其他外部数据源的访问也取决于您选择的数据及其来源；本政策不代表这些第三方服务的隐私规则。使用本地数据且所需运行库、权重均已配置后，模型推理可在本地离线进行。</p>
+      </section>
+      <section aria-labelledby="feedback"><h2 id="feedback">4. 隐私政策网页与反馈</h2>
+        <p>本政策网页通过 GitHub Pages 托管。网页自身没有添加统计脚本、广告、第三方字体或追踪代码；GitHub 作为托管提供方仍可能处理访问网页所需的 IP 地址及访问日志等信息，详见 <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub 隐私声明</a>。</p>
+        <p>您可以通过 <a href="https://github.com/radiofor/geoforma-privacy/issues">geoforma-privacy 仓库的 Issues</a>联系开发者。提交反馈时，GitHub 会处理您的账号信息和您主动提供的内容，开发者也会看到这些内容，并可用于处理您提出的问题。</p>
+        <p>Issues 是公开页面。请勿公开提交个人信息、密码、完整用户目录、敏感影像或未经脱敏的项目与日志。如需私下沟通，可先仅提出获取私下联系方式的请求。</p>
+      </section>
+      <section aria-labelledby="control"><h2 id="control">5. 您对数据的管理</h2>
+        <p>您可以决定导入哪些文件、保存或导出哪些结果，并自行备份、迁移或删除本地数据。软件提供下载缓存清理选项；清理下载缓存不等于删除已经配置的运行库、模型权重或用户项目。</p>
+        <p>卸载软件通常会保留原始影像、项目、恢复记录和自行下载的模型资源；是否清理特征缓存取决于卸载选项。删除本地文件前，请确认已备份需要保留的工作。</p>
+      </section>
+      <section aria-labelledby="services"><h2 id="services">6. 第三方平台与安全</h2>
+        <p>Microsoft Store 的安装、账户、更新及平台诊断由 Microsoft 的服务和系统设置管理，适用 Microsoft 的相关隐私规则。GitHub、资源下载服务及您主动访问的网站也分别适用其隐私规则。</p>
+        <p>GeoForma 对资源下载使用 HTTPS 和清单校验，但本政策不承诺所有本地文件均已加密，也不保证设备或第三方服务绝对安全。请妥善管理设备访问权限及备份。</p>
+      </section>
+      <section aria-labelledby="changes"><h2 id="changes">7. 政策更新</h2>
+        <p>如果软件的数据处理方式发生变化，开发者会更新本政策并修改页面日期。更新内容会在本页面及仓库中提供。</p>
+      </section>
+      <section aria-labelledby="contact"><h2 id="contact">8. 联系方式</h2>
+        <p>隐私问题请提交至：</p>
+        <p><a href="https://github.com/radiofor/geoforma-privacy/issues">https://github.com/radiofor/geoforma-privacy/issues</a></p>
+        <p>请遵循第 4 节关于公开反馈和敏感内容的说明。</p>
+      </section>
+    </article>
+    <footer><span>GeoForma · 本地地理影像标注</span><a href="https://github.com/radiofor/geoforma-privacy">隐私政策仓库</a></footer>
+  </main>
+</body>
+</html>

@@ -96,9 +96,6 @@ class ModelService:
     def prepare_model(self,config,task):return self._call('prepare_model',(config,),task)
     def predict(self,image,config,request,task):return self._call('predict',(image,config,request),task)
     def preview(self,image,config,request,task):return self._call('preview',(image,config,request),task)
-    def automatic(self,image,config,bounds,grid,task,level='detail',guidance=None):
-        raise ValueError('全图分割功能已移除，请使用正负点或框选逐个标注目标。')
-
     def close(self):
         if self.cancel_event is not None:self.cancel_event.set()
         self.ready=False;self.cancel_event=None

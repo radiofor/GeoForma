@@ -1,0 +1,109 @@
+{
+  "version": "1.0.5",
+  "screenshots_count": 4,
+  "assets": [
+    {
+      "file": "screenshots\\01-main-window.png",
+      "width": 1440,
+      "height": 960,
+      "bytes": 237627,
+      "sha256": "e6b3a7c4239ffabca9b7270bcffc711a20b4385d71b850ca351dc8bf08f3d4e4",
+      "source": "当前软件界面与合成影像示例"
+    },
+    {
+      "file": "screenshots\\02-image-import.png",
+      "width": 1440,
+      "height": 960,
+      "bytes": 216932,
+      "sha256": "aab1d0bc913caa33eda4dd8a90072fe34a223171757338eca4b9a1805b95787e",
+      "source": "当前软件界面与合成影像示例"
+    },
+    {
+      "file": "screenshots\\03-label-export.png",
+      "width": 1440,
+      "height": 960,
+      "bytes": 236227,
+      "sha256": "bf4b38d7b9e5104e6e8537b2b568af25b7232d91b544f5998cd2e2cedc62832a",
+      "source": "当前软件界面与合成影像示例"
+    },
+    {
+      "file": "screenshots\\04-reshape.png",
+      "width": 1440,
+      "height": 960,
+      "bytes": 239208,
+      "sha256": "4bc87022e3cf4351491337418a57d98cc879e9d4ce1fc86807d3630022f11de9",
+      "source": "当前软件界面与合成影像示例"
+    },
+    {
+      "file": "store-icons\\app-tile-300x300.png",
+      "width": 300,
+      "height": 300,
+      "bytes": 44889,
+      "sha256": "56b24f530be7a9ce2213f890a7ca55f26398f512973bbd54902030f014d54fe4",
+      "source": "assets/geoforma_logo_map_pen.png"
+    },
+    {
+      "file": "store-icons\\app-tile-150x150.png",
+      "width": 150,
+      "height": 150,
+      "bytes": 13039,
+      "sha256": "1117a728109f558ed391c33052aaff673508da319a83e99aa1818c9c2eacfc5c",
+      "source": "assets/geoforma_logo_map_pen.png"
+    },
+    {
+      "file": "store-icons\\app-tile-71x71.png",
+      "width": 71,
+      "height": 71,
+      "bytes": 3943,
+      "sha256": "712f4d2fcc86112a7e602675bc6cbe8924b79481a8d0e8e62e7392c368c07ed2",
+      "source": "assets/geoforma_logo_map_pen.png"
+    },
+    {
+      "kind": "poster",
+      "file": "promotional\\01-poster-720x1080.png",
+      "width": 720,
+      "height": 1080,
+      "bytes": 504386,
+      "sha256": "fb4f3a62a24e78d7b2b55c041fd1edeb32e6d40bc9214f593870a8ed61f38fd1",
+      "generated_with": "built-in image_gen",
+      "source_dimensions": [
+        1024,
+        1536
+      ],
+      "style": "flat-2d",
+      "artwork_type": "promotional artwork"
+    },
+    {
+      "kind": "box-art",
+      "file": "promotional\\02-box-art-1080x1080.png",
+      "width": 1080,
+      "height": 1080,
+      "bytes": 743542,
+      "sha256": "bbad448e0e2ea5d9581c482a536c351f270409ce2debe76b417f0205c1701e49",
+      "generated_with": "built-in image_gen",
+      "source_dimensions": [
+        1254,
+        1254
+      ],
+      "style": "flat-2d",
+      "artwork_type": "promotional artwork"
+    },
+    {
+      "kind": "hero",
+      "file": "promotional\\03-super-hero-1920x1080.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 1154496,
+      "sha256": "333e38458fcffd60d36b8371c4d7d11c13cb2fcdaeb761df9d481f180f50dd7f",
+      "generated_with": "built-in image_gen",
+      "source_dimensions": [
+        1672,
+        941
+      ],
+      "style": "flat-2d",
+      "artwork_type": "promotional artwork"
+    }
+  ],
+  "promotional_images_count": 3,
+  "promotional_style": "flat-2d"
+}

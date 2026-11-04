@@ -3,7 +3,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QFileDialog
 from ..reference_images import (display_descriptor,reference_recipe,read_display,
     reference_group_name,suggested_reference_name,reference_origin)
-from ..reference_catalog import ReferenceLookup,reference_key,merge_references,equivalent_reference
+from ..reference_catalog import ReferenceLookup,reference_key,reference_stem,merge_references,equivalent_reference
 from ..raster import inspect_source
 from ..operation_state import can_start_operation,interaction_locked
 from ..ui.modal import dialog_result
@@ -36,7 +36,7 @@ class ReferenceWorkflow:
         if not self.project['images']:
             self.statusBar().showMessage('请先导入主影像，再添加参考',8000);return
         current=dict(self.image) if self.image else None
-        stems={Path(image['path']).stem.casefold() for image in self.project['images']}
+        stems={reference_stem(image['path']) for image in self.project['images']}
         def work(task):
             from ..image_list import plan_import
             task.signals.progress.emit(0,0,'读取文件引用')
@@ -44,17 +44,17 @@ class ReferenceWorkflow:
             references=[];errors=plan.errors;frames=[];seen=set();unmatched=0
             for i,(path,metadata) in enumerate(plan.entries):
                 task.check()
-                if Path(path).stem.casefold() not in stems:
+                if reference_stem(path) not in stems:
                     unmatched+=1
                     task.signals.progress.emit(i+1,len(plan.entries),'未匹配 · '+Path(path).name)
                     continue
                 try:
-                    ref=inspect_source(path);key=Path(ref['path']).stem.casefold()
+                    ref=inspect_source(path);key=reference_stem(ref['path'])
                     if key in seen:raise ValueError('同一参考类型存在多个同名影像，请分开导入。')
                     ref['display_recipe']=reference_recipe(ref);ref['group']=group
                     ref['reference_origin']=reference_origin(path,metadata)
                     if metadata:ref['import_list']=metadata
-                    if current and Path(current['path']).stem.casefold()==key:
+                    if current and reference_stem(current['path'])==key:
                         descriptor=display_descriptor(current,ref);window=[0,0,current['width'],current['height']]
                         frames.append((descriptor,window,read_display(descriptor,window,max_size=1400)))
                     references.append(ref);seen.add(key)

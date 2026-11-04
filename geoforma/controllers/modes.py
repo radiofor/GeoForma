@@ -1,5 +1,5 @@
-"""Mode transitions preserve independent drafts and histories without moving results."""
-from ..annotation_modes import INDIVIDUAL,AUTOMATIC
+"""Persist the interactive annotation context and its edit history."""
+INDIVIDUAL='individual'
 
 
 class ModeWorkflow:
@@ -21,19 +21,23 @@ class ModeWorkflow:
 
 
     def invalidate_model_drafts(self,image_ids=None):
-        """Invalidate model-refined drafts while retaining original candidate seeds."""
-        def invalidate(draft,mode=INDIVIDUAL):
+        """Invalidate model-refined drafts while retaining manual geometry."""
+        from ..editing_state import manual_label
+        labels_by_id=None
+        def invalidate(draft):
+            nonlocal labels_by_id
             if not draft:return
-            if mode==AUTOMATIC and not (draft.get('points') or draft.get('box') or draft.get('ignore_seed') or draft.get('choices')):return
-            from ..editing_state import manual_label
-            if draft.get('editing_state')=='manual' or manual_label(next((l for l in self.project['labels'] if l['id']==draft.get('base_id')),None)):return
-            if draft:
-                draft['pending']=True;draft['ignore_seed']=True
-                draft.pop('choices',None);draft.pop('logits',None)
+            if draft.get('editing_state')=='manual':return
+            base=draft.get('base_id')
+            if base:
+                if labels_by_id is None:labels_by_id={label['id']:label for label in self.project['labels']}
+                if manual_label(labels_by_id.get(base)):return
+            draft['pending']=True;draft['ignore_seed']=True
+            draft.pop('choices',None);draft.pop('logits',None)
         def affected(image_id):return image_ids is None or image_id in image_ids
-        if self.image and affected(self.image['id']):invalidate(self.draft,self.annotation_mode())
+        if self.image and affected(self.image['id']):invalidate(self.draft)
         for image in self.project['images']:
             if affected(image['id']):
-                for mode in (INDIVIDUAL,AUTOMATIC):invalidate(image.get('mode_sessions',{}).get(mode,{}).get('draft'),mode)
+                invalidate(image.get('mode_sessions',{}).get(INDIVIDUAL,{}).get('draft'))
         for (image_id,mode),session in self.image_sessions.items():
-            if affected(image_id):invalidate(session.get('draft'),mode)
+            if affected(image_id):invalidate(session.get('draft'))

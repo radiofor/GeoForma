@@ -29,7 +29,7 @@ def test_explicit_edit_tool_switch_cancels_only_construction_line(workbench,tool
 
 def test_target_changes_are_locked_but_save_and_navigation_remain_available(workbench):
     w,app,_=workbench;w.begin_reshape()
-    for control in (w.images,w.model_button,w.import_button,w.import_action,w.label_filter,w.confirm_button):
+    for control in (w.images,w.model_button,w.import_button,w.import_action,w.confirm_button):
         assert not control.isEnabled()
     assert w.project_actions['save'].isEnabled() and not w.project_actions['recover'].isEnabled()
     assert w.labels_table.isEnabled() and w.fit_action.isEnabled()

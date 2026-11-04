@@ -6,7 +6,7 @@ from PySide6.QtCore import QTimer, QThreadPool
 from PySide6.QtWidgets import QMainWindow
 from .domain import new_project
 from .model_preferences import application_settings,last_model
-from .services import ModelService
+from .inference.client import ModelService
 from .viewport import ImageView
 from .branding import application_icon
 from .window_preferences import remember_window, restore_window
@@ -51,7 +51,7 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
         self.runtime_hardware=(getattr(startup_context,'runtime_hardware',None) or {})
         self.state=WorkbenchState(copy.deepcopy(startup_context.project) if startup_context else new_project(last_model(self.settings)))
         self.service=ModelService();self.pool=QThreadPool(self);self.pool.setMaxThreadCount(1);self.render_pool=QThreadPool(self);self.render_pool.setMaxThreadCount(1)
-        self.task=None;self.task_kind=None;self.render_task=None;self.render_pending=False;self.render_generation=0;self.shutdown_task=None;self.shutdown_complete=False;self.shutdown_ready=False;self.shutdown_finishing=False;self.shutdown_dialog=None;self.actions_to_lock=[]
+        self.task=None;self.task_kind=None;self.render_task=None;self.render_pending=False;self.render_generation=0;self.shutdown_task=None;self.shutdown_complete=False;self.shutdown_ready=False;self.actions_to_lock=[]
         self.auto_prepare=auto_prepare;self.preparation=PreparationQueue();self.preparing_id=None;self.restoring_project=False
         self.display_reference=None;self.reference_transition_pending=False
         self.storage_pool=QThreadPool(self);self.storage_pool.setMaxThreadCount(1);self.autosave_task=None
@@ -59,7 +59,7 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
         self.project_saves=ProjectSaveQueue()
         self.housekeeping_pool=QThreadPool(self);self.housekeeping_pool.setMaxThreadCount(1);self.housekeeping_task=None
         self.load_pool=QThreadPool(self);self.load_pool.setMaxThreadCount(1);self.loading_task=None;self.project_transition=None
-        self.candidate_pool=QThreadPool(self);self.candidate_pool.setMaxThreadCount(1);self.candidate_task=None;self.candidate_index=None;self.candidate_key=None
+        self.label_index_pool=QThreadPool(self);self.label_index_pool.setMaxThreadCount(1);self.label_index_task=None;self.label_index=None;self.label_index_key=None
         self.view=ImageView()
         from .rendering.smoothing_queue import SmoothingQueue
         self.smoother=SmoothingQueue(self);self.smoother.updated.connect(self.smoothing_updated);self.smoother.error.connect(self.smoothing_error)
@@ -106,8 +106,8 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
                 QTimer.singleShot(350,self,self.remind_resources);QTimer.singleShot(5000,self,self.start_background_cleanup)
 
     def current_labels(self):
-        # Existing labels remain available after removal of the old whole-image mode.
-        return self.label_lookup.for_image(self.project['labels'],self.image['id']) if self.image else ()
+        # Only confirmed records participate in the workbench.
+        return self.label_lookup.confirmed_for_image(self.project['labels'],self.image['id']) if self.image else ()
 
     def dragEnterEvent(self,event):
         from .image_list import IMPORT_SUFFIXES
@@ -128,8 +128,8 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
     # Explicit state bridge keeps the public workbench API stable.
     def _set_project(self,value):
         self.state.project=value
-        self.state.candidate_indexes.clear()
-        self.candidate_index=None;self.candidate_key=None
+        self.state.label_indexes.clear()
+        self.label_index=None;self.label_index_key=None
         if hasattr(self,'label_lookup'):self.label_lookup.clear()
     project = property(lambda self: self.state.project, _set_project)
     project_path = property(lambda self: self.state.project_path, lambda self, value: setattr(self.state, 'project_path', value))
@@ -144,7 +144,6 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
     selected_ids = property(lambda self: self.state.selected_ids, lambda self, value: setattr(self.state, 'selected_ids', value))
     selected_points = property(lambda self: self.state.selected_points, lambda self, value: setattr(self.state, 'selected_points', value))
     image_sessions = property(lambda self: self.state.image_sessions, lambda self, value: setattr(self.state, 'image_sessions', value))
-    pending_review = property(lambda self: self.state.pending_review, lambda self, value: setattr(self.state, 'pending_review', value))
     runtime_status = property(lambda self: self.state.runtime_status, lambda self, value: setattr(self.state, 'runtime_status', value))
     dirty = property(lambda self: self.state.dirty, lambda self, value: setattr(self.state, 'dirty', value))
     dirty_revision = property(lambda self: self.state.dirty_revision, lambda self, value: setattr(self.state, 'dirty_revision', value))
@@ -155,4 +154,4 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
     mode_histories = property(lambda self: self.state.mode_histories, lambda self, value: setattr(self.state, 'mode_histories', value))
     tool_modes = property(lambda self: self.state.tool_modes, lambda self, value: setattr(self.state, 'tool_modes', value))
     model_warmup_signature = property(lambda self: self.state.model_warmup_signature, lambda self, value: setattr(self.state, 'model_warmup_signature', value))
-    candidate_indexes = property(lambda self: self.state.candidate_indexes, lambda self, value: setattr(self.state, 'candidate_indexes', value))
+    label_indexes = property(lambda self: self.state.label_indexes, lambda self, value: setattr(self.state, 'label_indexes', value))

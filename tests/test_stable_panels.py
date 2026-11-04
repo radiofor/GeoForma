@@ -12,7 +12,7 @@ def settle(app):
 
 
 def rectangles(w):
-    names=('mode_settings','editor_group','label_count','labels_table',
+    names=('mode_settings','editor_group','labels_table',
            'zoom_button','review_navigation','export_group','image_scroll','model_button',
            'images','image_info','state_label','context_status')
     return {name:(getattr(w,name).mapTo(w,QPoint()).toTuple(),getattr(w,name).size().toTuple()) for name in names}
@@ -62,7 +62,7 @@ def test_dynamic_text_and_progress_keep_controls_in_place(workbench):
     w,app,wait,errors=workbench;w.resize(1440,900);settle(app)
     w.task=object();w.task_kind='automatic';w.task_title='测试任务';w.progress_presentation.begin();w.update_controls();w.task_progress(1,10,'读取数据');settle(app)
     before=rectangles(w);task_slot=w.statusBar().text_slot.geometry()
-    w.project_title.setText('a_very_long_project_name_'*20+'.geoforma.json')
+    w.project_title.setText('a_very_long_project_name_'*20+'.gfm')
     w.model_runtime.setText('设备：CPU（回退） · '+'加载状态'*100)
     w.image_info.setText('90000 × 80000 · 12 波段\n影像投影：'+'投影说明'*100+'\n模型 RGB：1/2/3')
     w.prompt_counters.set_points([[0,0,1]]*12000+[[0,0,0]]*8000)
@@ -143,7 +143,7 @@ def test_label_columns_fill_available_width_and_show_scrollbar_only_for_overflow
     from geoforma.ui.label_table import LabelRow
     from geoforma.ui.label_status import status_layout
     w,app,wait,errors=workbench;w.resize(1440,900);settle(app)
-    w.label_presenter.sync([LabelRow('one','目标','待审')]);settle(app)
+    w.label_presenter.sync([LabelRow('one','目标','未保存')]);settle(app)
     table=w.labels_table;geometry=table.geometry();column_widths=[table.columnWidth(i) for i in range(3)]
     assert not table.body_scrollbar.isVisible()
     assert sum(table.columnWidth(i) for i in range(3))==table.viewport().width()
@@ -158,7 +158,7 @@ def test_label_columns_fill_available_width_and_show_scrollbar_only_for_overflow
     assert table.body_scrollbar.mapTo(table,table.body_scrollbar.rect().topLeft()).y()>header.geometry().bottom()
     table.body_scrollbar.setValue(15);assert table.verticalScrollBar().value()==15
     table.verticalScrollBar().setValue(20);scroll=table.verticalScrollBar().value()
-    w.label_presenter.sync([LabelRow(str(i),'类别','待审') for i in range(100)]);settle(app)
+    w.label_presenter.sync([LabelRow(str(i),'类别','未保存') for i in range(100)]);settle(app)
     assert table.verticalScrollBar().value()==scroll and table.geometry()==geometry
     w.label_presenter.sync([]);settle(app)
     assert not table.body_scrollbar.isVisible()

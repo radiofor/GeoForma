@@ -28,7 +28,7 @@ def test_save_components_as_independent_rows_and_restore_history(workbench,singl
     assert all(l['geometry']['type']=='Polygon' for l in w.project['labels'])
     assert len({l['id'] for l in w.project['labels']})==count and len(w.label_undo)==1
     assert all(row.status=='已保存' for row in w.label_presenter.rows)
-    w.project_path=tmp/'parts.geoforma.json';w.save();w.open_project(w.project_path)
+    w.project_path=tmp/'parts.gfm';w.save();w.open_project(w.project_path)
     saved=copy.deepcopy(w.project['labels']);w.undo_label();assert not w.project['labels']
     w.redo_label();assert w.project['labels']==saved and w.labels_table.rowCount()==count
 

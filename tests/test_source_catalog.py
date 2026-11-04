@@ -19,9 +19,31 @@ def project_with_sources(folder):
     return project
 
 
+def test_background_snapshots_detach_paths_without_copying_workbench_sessions(tmp_path):
+    from geoforma.raster_snapshot import image_snapshot
+    from geoforma.source_catalog import guard_snapshot
+    class Uncopyable:
+        def __deepcopy__(self,memo):raise AssertionError('Unrelated editing data was copied')
+    image={'id':'one','path':str(tmp_path/'source.tif'),'source_paths':[str(tmp_path/'tile.tif')],
+           'model_recipe':{'bands':[1,1,1]},'mode_sessions':{'draft':Uncopyable()}}
+    reference={'path':str(tmp_path/'reference.tif'),'source_paths':[str(tmp_path/'reference.tif')],
+               'import_list':{'source':str(tmp_path/'catalog.vrt'),'source_paths':[str(tmp_path/'nested.vrt')],
+                              'note':Uncopyable()},'unused':Uncopyable()}
+    project={'images':[image],'references':[reference]}
+    detached=image_snapshot(image);protected=guard_snapshot(project)
+    image['source_paths'].append(str(tmp_path/'later.tif'))
+    image['model_recipe']['bands'][0]=2
+    reference['import_list']['source_paths'].clear()
+    assert detached['model_recipe']['bands']==[1,1,1] and len(detached['source_paths'])==1
+    assert protected[0]['source_paths']==[str(tmp_path/'tile.tif')]
+    assert protected[1]['import_list']['source_paths']==[str(tmp_path/'nested.vrt')]
+    with pytest.raises(ValueError,match='覆盖源影像'):
+        SourceGuard(protected).check(tmp_path/'nested.vrt')
+
+
 def test_portable_reference_sources_and_provenance_roundtrip(tmp_path):
     original=tmp_path/'original';project=project_with_sources(original)
-    path=original/'work.geoforma.json';before=copy.deepcopy(project);save_project(project,path)
+    path=original/'work.gfm';before=copy.deepcopy(project);save_project(project,path)
     assert project==before
     payload=json.loads(path.read_text(encoding='utf-8'))
     assert not Path(payload['references'][0]['path']).is_absolute()
@@ -43,20 +65,15 @@ def test_autosave_detaches_reference_catalog_and_nested_metadata(tmp_path):
     assert snapshot['references']==before
 
 
-@pytest.mark.parametrize('source_kind',['main','reference','manifest','backup'])
+@pytest.mark.parametrize('source_kind',['main','reference','manifest'])
 def test_project_save_cannot_overwrite_any_imported_source(tmp_path,source_kind):
     project=project_with_sources(tmp_path)
     target=Path(project['images'][0]['path'] if source_kind=='main' else
                 project['references'][0]['import_list']['source'] if source_kind=='manifest' else project['references'][0]['path'])
-    if source_kind=='backup':
-        backup=target.with_name('collision.geoforma.json.bak');target.rename(backup)
-        project['references'][0]['path']=str(backup);target=backup.with_name('collision.geoforma.json')
-        protected=backup
-    else:protected=target
+    protected=target
     original=protected.read_bytes()
     with pytest.raises(ValueError,match='覆盖'):save_project(project,target)
     assert protected.read_bytes()==original
-    if source_kind=='backup':assert not target.exists()
 
 
 def test_vrt_sources_discovered_for_legacy_records_and_only_once(tmp_path,monkeypatch):
@@ -87,7 +104,7 @@ def test_shapefile_companion_cannot_replace_reference(tmp_path):
 
 def test_missing_optional_reference_can_still_be_saved(tmp_path):
     project=project_with_sources(tmp_path);Path(project['references'][0]['path']).unlink()
-    path=tmp_path/'work.geoforma.json';save_project(project,path)
+    path=tmp_path/'work.gfm';save_project(project,path)
     assert load_project(path)['references'][0]['path']==project['references'][0]['path']
 
 
@@ -105,14 +122,12 @@ def test_inspection_opens_raster_once_and_retains_all_source_paths(tmp_path,monk
 def test_late_autosave_keeps_capture_order_after_newer_manual_save(tmp_path):
     project=new_project();project['name']='older state';snapshot=project_snapshot(project)
     time.sleep(.005);project['name']='newer manual save'
-    path=tmp_path/'work.geoforma.json';autosave=Path(str(path)+'.autosave')
+    path=tmp_path/'work.gfm';autosave=tmp_path/'snapshot.gfm'
     save_project(project,path);save_project(snapshot,autosave)
     assert autosave.stat().st_mtime_ns<path.stat().st_mtime_ns
     assert load_project(path)['name']=='newer manual save'
     assert '_snapshot_time_ns' not in json.loads(autosave.read_text(encoding='utf-8'))
     assert load_project(autosave)['name']=='older state'
-    from geoforma.controllers.project_loading import ProjectLoadingWorkflow
-    assert ProjectLoadingWorkflow().project_source(path,recover_latest=True)==path
 
 
 def test_expanded_vrt_provenance_chain_is_portable_and_protected(tmp_path):
@@ -123,7 +138,7 @@ def test_expanded_vrt_provenance_chain_is_portable_and_protected(tmp_path):
     guard=SourceGuard(project_sources(project))
     for path in (root,nested):
         with pytest.raises(ValueError,match='覆盖'):guard.check(path)
-    project_file=original/'work.geoforma.json';save_project(project,project_file)
+    project_file=original/'work.gfm';save_project(project,project_file)
     payload=json.loads(project_file.read_text(encoding='utf-8'))
     assert all(not Path(value).is_absolute() for value in payload['images'][0]['import_list']['source_paths'])
     moved=tmp_path/'moved';shutil.copytree(original,moved);loaded=load_project(moved/project_file.name)

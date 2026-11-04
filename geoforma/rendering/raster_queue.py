@@ -34,7 +34,7 @@ class RasterRenderQueue(QObject):
     def request(self,image,generation,window,size,overview=False):
         if self.closed:return
         self.generation=generation
-        # Working drafts and candidate lists can be very large; they are not display inputs.
+        # Working drafts can be very large; they are not display inputs.
         snapshot=copy.deepcopy({k:v for k,v in image.items() if k in ('id','path','width','height','fingerprint','display_recipe','transform','crs','assigned_crs','_reference')})
         key=digest({'source':snapshot.get('fingerprint',snapshot['path']),'recipe':snapshot['display_recipe'],'window':window,'size':size})
         request=RasterRequest(key,generation,self.revision,tuple(window),size,overview,snapshot)

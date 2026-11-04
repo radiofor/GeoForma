@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt,QTimer,QUrl,QSize
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QFormLayout,QLabel,QWidget,
-    QPushButton,QPlainTextEdit,QFileDialog,QSizePolicy,QMenu,QTabWidget,QTabBar,QMessageBox)
+    QPushButton,QPlainTextEdit,QFileDialog,QSizePolicy,QMenu,QTabWidget,QTabBar)
 from .. import native_runtime
 from ..model_catalog import MODELS,model_spec
 from ..resource_state import inventory

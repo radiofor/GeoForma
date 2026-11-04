@@ -70,7 +70,7 @@ def validate_sessions(project):
         if not isinstance(sessions,dict):raise ValueError('影像工作状态无效。')
         if 'working_draft' in image:validate_draft(image['working_draft'],image['id'],set(images),labels,class_ids)
         for mode,session in sessions.items():
-            if mode not in ('individual','automatic') or not isinstance(session,dict):raise ValueError('标注模式工作状态无效。')
+            if mode!='individual' or not isinstance(session,dict):raise ValueError('标注模式工作状态无效。')
             validate_draft(session.get('draft',{}),image['id'],set(images),labels,class_ids)
             if session.get('view') is not None:validate_window(session['view'])
             validate_navigation(session.get('navigation'))
@@ -94,14 +94,10 @@ def validate_sessions(project):
     validate_draft(workspace.get('draft',{}),image_id,set(images),labels,class_ids)
     if workspace.get('view_window') is not None:validate_window(workspace['view_window'])
     validate_navigation(workspace.get('navigation'))
-    if workspace.get('operation',0) not in (0,1):raise ValueError('工作状态的标注模式无效。')
+    if workspace.get('operation',0)!=0:raise ValueError('工作状态的标注模式无效。')
     from .tool_state import compatible_tool
-    if 'tool' in workspace and not compatible_tool(workspace['tool'],'automatic' if workspace.get('operation',0)==1 else 'individual'):raise ValueError('工作状态的工具无效。')
+    if 'tool' in workspace and not compatible_tool(workspace['tool'],'individual'):raise ValueError('工作状态的工具无效。')
     tools=workspace.get('tools',{})
-    if not isinstance(tools,dict) or any(mode not in ('individual','automatic') or not compatible_tool(tool,mode) for mode,tool in tools.items()):raise ValueError('标注模式的工具记录无效。')
-    for flag in ('auto_apply','auto_regenerate','single_polygon','preparation_paused','raw_view'):
+    if not isinstance(tools,dict) or any(mode!='individual' or not compatible_tool(tool,mode) for mode,tool in tools.items()):raise ValueError('标注模式的工具记录无效。')
+    for flag in ('auto_apply','single_polygon','preparation_paused','raw_view'):
         if flag in workspace and type(workspace[flag]) is not bool:raise ValueError('工作状态的选项无效。')
-    if 'candidate_range' in workspace:
-        limits=workspace['candidate_range']
-        if not isinstance(limits,(list,tuple)) or len(limits)!=3 or not all(finite_number(v) and 0<=v<=100 for v in limits[:2]) or type(limits[2]) is not bool:raise ValueError('候选范围工作状态无效。')
-    if 'candidate_layer' in workspace and (type(workspace['candidate_layer']) is not int or workspace['candidate_layer']<0):raise ValueError('候选位置无效。')

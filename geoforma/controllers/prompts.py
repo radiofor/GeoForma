@@ -5,7 +5,7 @@ import copy
 from shapely.geometry import shape
 from ..domain import prompt_window
 from ..workflow import best_choice
-from ..model_requests import model_image
+from ..raster_snapshot import image_snapshot
 from ..prompt_bounds import contains_point,bounded_points,clip_geometry
 from ..editing_state import draft_snapshot,geometry_history
 
@@ -114,8 +114,6 @@ class PromptWorkflow:
         return True
 
     def add_point(self,x,y,label):
-        # In full-image mode a click on an existing visible candidate means
-        # refine that object. Empty space starts guidance for the next run.
         if not self.can_prompt():return
         if not contains_point(self.draft.get('box'),x,y):
             self.statusBar().showMessage(ui_text('prompts.outside_box'),2000);return
@@ -163,7 +161,7 @@ class PromptWorkflow:
             self.log_message(ui_text('prompts.predict.008'));return
         try:
             previous=self.draft.get('window');points=self.draft.get('points',[]);box=self.draft.get('box')
-            # A selected candidate without prompts uses its extent when expanding.
+            # An existing contour can supply the extent when expanding.
             selection_box=box or (list(shape(self.draft['geometry']).bounds) if not points and self.draft.get('geometry') else None)
             window=prompt_window(points,selection_box,previous,expand)
             seed=None if self.draft.get('ignore_seed') else self.draft.get('seed_geometry')
@@ -171,7 +169,7 @@ class PromptWorkflow:
             request={'window':window,'points':copy.deepcopy(points),'box':box or (selection_box if not points else None),'logits':None,
                      'seed':seed,'single_polygon':self.single_polygon.isChecked(),'editing_state':self.draft.get('editing_state','model')}
             # A stale prediction cannot be confirmed while new prompts are pending.
-            self.draft['pending']=True;self.redraw();image=model_image(self.image);config=copy.deepcopy(self.project['model'])
+            self.draft['pending']=True;self.redraw();image=image_snapshot(self.image);config=copy.deepcopy(self.project['model'])
             revision=self.prompt_revision;context=self.annotation_context()
             self.run(ui_text('prompts.predict.009'),lambda t:self.service.predict(image,config,request,t),lambda result:self.predicted(result) if revision==self.prompt_revision and context==self.annotation_context() else None,kind='interactive')
         except Exception as e:self.error(str(e))

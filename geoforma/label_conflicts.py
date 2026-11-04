@@ -51,12 +51,14 @@ def resolve(label,labels,policy='clip'):
             'original_area':original_area,'saved_area':g.area,'policy':policy}
 
 
-def assert_no_overlaps(labels,task=None):
-    confirmed=[l for l in labels if l['status']=='confirmed'];geometries=[shape(l['geometry']) for l in confirmed]
+def assert_no_overlaps(labels,task=None,geometries=None):
+    confirmed=[l for l in labels if l['status']=='confirmed']
+    if geometries is None:geometries=[shape(l['geometry']) for l in confirmed]
+    elif len(geometries)!=len(confirmed):raise ValueError('重叠检查的标签与几何数量不一致。')
     tree=STRtree(geometries)
     for i,g in enumerate(geometries):
         if task:task.check()
         for j in tree.query(g):
             j=int(j)
             if j>i and confirmed[i]['image_id']==confirmed[j]['image_id'] and g.intersection(geometries[j]).area>0:
-                raise ValueError(f"已保存标签存在重叠：{confirmed[i]['id'][:8]} 与 {confirmed[j]['id'][:8]}。请调整并重新保存后导出；候选不受此限制。")
+                raise ValueError(f"已保存标签存在重叠：{confirmed[i]['id'][:8]} 与 {confirmed[j]['id'][:8]}。请调整并重新保存后导出。")

@@ -9,7 +9,7 @@ GeoForma Microsoft Store 渠道
 设置 GEOFORMA_BUILD_CHANNEL=store。
 python tools/build_release.py --optional-runtime --output-dir build/store-staging
 python tools/build_msix.py --bundle build/store-staging/portable/GeoForma
-推理运行库与模型权重在软件内按需配置。各版本发布包独立存放，不覆盖旧版本。
+推理运行库与模型权重在软件内按需配置。
 
 Store profile 仅作为商店冻结数据加入 _internal/geoforma；设置环境变量不会把源码变成商店渠道。
 package_context.py 读取实际 Windows 包身份，并避免覆盖系统分配的 AUMID。

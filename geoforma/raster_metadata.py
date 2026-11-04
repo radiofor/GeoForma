@@ -22,7 +22,3 @@ def validate_metadata(image):
             if 'ranges' in recipe:
                 from .contracts import validate_recipe
                 validate_recipe(recipe,bands)
-    runs=image.get('candidate_runs',{})
-    if not isinstance(runs,dict):raise ValueError('候选批次记录无效。')
-    for run in runs.values():
-        if not isinstance(run,dict) or not isinstance(run.get('label_ids',[]),list) or not all(isinstance(v,str) for v in run.get('label_ids',[])):raise ValueError('候选批次的标签列表无效。')

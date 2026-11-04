@@ -19,7 +19,7 @@ class LabelWorkflow:
         batch={d.get('base_id'):d for d in self.draft.get('reshape_batch',[]) if d.get('base_id')}
         from ..editing_state import batch_labels
         labels=batch_labels(labels,self.draft)
-        active=not base or any(l['id']==base for l in self.current_batch_labels())
+        active=not base or any(l['id']==base for l in self.current_labels())
         reshape=self.reshape_session
         preview=reshape.get('preview') if reshape else None
         if preview:labels=[dict(label,geometry=preview['geometry']) if label['id']==reshape['label']['id'] else label for label in labels]
@@ -81,13 +81,8 @@ class LabelWorkflow:
     def selected_label(self):
         draft=next((d for d in self.draft_labels() if d['id']==self.selected_id),None)
         if draft:return draft
-        return self.label_lookup.for_id(self.project['labels'],self.image['id'],self.selected_id) if self.image else None
-
-    def editable_label(self,label):
-        if label and label['status']=='candidate' and self.candidate_index and self.candidate_key==self.candidate_signature():
-            resolved=self.candidate_index.by_id.get(label['id'])
-            if resolved:return resolved
-        return label
+        label=self.label_lookup.for_id(self.project['labels'],self.image['id'],self.selected_id) if self.image else None
+        return label if label and label['status']=='confirmed' else None
 
     def zoom_selected(self):
         label=self.selected_label()
@@ -96,7 +91,7 @@ class LabelWorkflow:
 
     def edit_selected(self,checked=False,activate_tool=True,locate=True):
         if self.foreground_task_active():return
-        label=self.editable_label(self.selected_label())
+        label=self.selected_label()
         if not label:return
         if label['status']=='draft':
             if locate:self.zoom_selected()
@@ -114,10 +109,6 @@ class LabelWorkflow:
         self.draft['class_id']=self.classes.currentData();self.draft['initial_class_id']=self.classes.currentData()
         self.update_draft_info();self.refresh_labels();self.update_controls();self.mark_dirty()
 
-    def accept_selected(self):
-        label=self.selected_label()
-        if label and label['status']=='candidate' and not self.foreground_task_active():self.edit_selected();self.confirm()
-
     def delete_selected(self):
         if self.foreground_task_active() or self.reshape_session is not None:return
         drafts=self.draft_labels();chosen=self.selected_ids or {self.draft.get('base_id')}
@@ -129,24 +120,19 @@ class LabelWorkflow:
         from ..draft_parts import remove_parts
         self.draft=remove_parts(self.draft,drafts,deleted)
         self.project['labels']=[l for l in self.project['labels'] if l['id'] not in deleted]
-        self.image['dismissed_candidates']=sorted(set(self.image.get('dismissed_candidates',[]))|(deleted&saved_ids))
-        self.selected_id=None;self.selected_ids.clear();self.selected_points.clear();self.pending_review=None
+        self.selected_id=None;self.selected_ids.clear();self.selected_points.clear()
         self.prompt_revision+=1;self.auto_apply_timer.stop();self.invalidate_preview()
         self.refresh_labels();self.mark_dirty();self.autosave()
 
     def confirm(self):
         if self.draft.get('reshape_batch'):
             self.confirm_reshape_batch();return
-        if not self.draft and self.selected_label() and self.selected_label()['status']=='candidate':
-            self.edit_selected(activate_tool=False,locate=False)
         if self.foreground_task_active() or self.reshape_session is not None or not self.draft.get('geometry') or self.draft.get('pending'):return
         if self.classes.currentData() is None:self.statusBar().showMessage(ui_text('labels.confirm.005'),3000);return
         from ..session_validation import validate_draft
         try:validate_draft(self.draft,self.image['id'],{i['id'] for i in self.project['images']}|{self.image['id']},{l['id']:l for l in self.project['labels']},{c['id'] for c in self.project['classes']})
         except ValueError as error:self.statusBar().showMessage(str(error),5000);return
         identifier=self.draft.get('base_id') or (self.draft.get('display_ids') or [None])[0] or uid();old=next((copy.deepcopy(l) for l in self.project['labels'] if l['id']==identifier),None)
-        continue_review=old and old['status']=='candidate' and self.label_filter.currentIndex()!=1
-        review_position=list(shape(self.draft['geometry']).bounds)[:2] if continue_review else None
         label={k:copy.deepcopy(self.draft.get(k)) for k in ['geometry','points','box','window','edge','score','feature_key']}
         for key in ('prompt_scope','prompt_group'):
             if key in self.draft:label[key]=self.draft[key]
@@ -193,7 +179,7 @@ class LabelWorkflow:
         history.extend((part['id'],None,len(remaining)+i) for i,part in enumerate(saved) if i)
         self.flush_label_history()
         self.project['labels']=remaining+saved;self.label_undo.append(history);self.label_redo=[];self.clear_draft();self.selected_id=identifier;self.selected_ids={part['id'] for part in saved}
-        self.pending_review=review_position;self.refresh_labels();self.label_presenter.reveal(identifier);self.mark_dirty();self.autosave();self.log_message(ui_text('labels.confirm.006')+identifier[:8])
+        self.refresh_labels();self.label_presenter.reveal(identifier);self.mark_dirty();self.autosave();self.log_message(ui_text('labels.confirm.006')+identifier[:8])
 
 
 

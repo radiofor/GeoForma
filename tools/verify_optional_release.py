@@ -26,6 +26,7 @@ def main():
         for scale in ('1','1.5'):
             report=run('core_'+scale,['--test-core-only'],dict(env,GEOFORMA_DATA_DIR=str(data.parent/'empty-data'),QT_SCALE_FACTOR=scale),timeout=60)
             assert report['resources']=={'runtime':False,'weight':False}
+            assert report['checks']['export']
             shutil.copy2(qa/'resource_setup.png',qa/('core_'+scale+'.png'))
     elif args.phase=='install':
         empty=run('missing_runtime',['--resource-command','status'],dict(env,GEOFORMA_DATA_DIR=str(data.parent/'empty-data')))

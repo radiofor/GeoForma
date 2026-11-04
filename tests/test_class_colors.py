@@ -39,7 +39,7 @@ def test_exhausted_palette_has_a_bounded_unique_fallback(monkeypatch):
 def test_invalid_color_is_rejected_by_category_and_project_validation(tmp_path,value):
     category=dict(id=1,name='湖泊',color=value)
     with pytest.raises(ValueError,match='颜色'):validate_classes([category])
-    project=new_project();project['classes']=[category];path=tmp_path/'invalid.geoforma.json'
+    project=new_project();project['classes']=[category];path=tmp_path/'invalid.gfm'
     with pytest.raises(ValueError,match='颜色'):save_project(project,path)
     path.write_text(json.dumps(project),encoding='utf-8')
     with pytest.raises(ValueError,match='颜色'):load_project(path)
@@ -92,7 +92,7 @@ def test_colors_survive_rename_snapshot_and_project_reopen(tmp_path):
     dialog=ClassesDialog(project['classes'],2,set(),1);dialog.name.setText('湖泊');dialog.rename()
     assert dialog.classes[0]['color']=='#12ab34'
     project['classes']=dialog.classes;snapshot=project_snapshot(project);project['classes'][0]['color']='#345678'
-    path=tmp_path/'colors.geoforma.json';save_project(snapshot,path)
+    path=tmp_path/'colors.gfm';save_project(snapshot,path)
     assert snapshot['classes'][0]['color']=='#12ab34'
     assert json.loads(path.read_text(encoding='utf-8'))['classes'][0]['color']=='#12AB34'
     assert load_project(path)['classes']==[dict(id=1,name='湖泊',color='#12AB34')]

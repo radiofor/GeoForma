@@ -4,7 +4,7 @@ from ...window_preferences import RIGHT_SIDEBAR_WIDTHS
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QAbstractItemView, QCheckBox, QLineEdit, QStackedWidget,QDoubleSpinBox
 from ...theme import PanelGroupBox as QGroupBox
-from ..controls import action_button,scroll_panel,ElidedLabel
+from ..controls import scroll_panel,ElidedLabel
 from ..readouts import PromptCounters
 from ..centered_combo import CenteredComboBox
 from ..layouts import card_layout,polish_controls,reserve_scrollbar
@@ -106,10 +106,6 @@ def build_reshape(w,layout):
 
 
 def build_label_list(w,layout):
-    from ..label_summary import LabelSummary
-    # Keep the internal filter for legacy project handling, without displaying
-    # the obsolete saved/candidate counters in the annotation panel.
-    w.label_count=LabelSummary();w.label_filter=w.label_count;w.label_filter.currentIndexChanged.connect(w.refresh_labels)
     from ..label_table import LabelTable
     w.labels_table=LabelTable()
     w.labels_table.setHorizontalHeaderLabels(['序号',ui_text('annotation.build_label_list.050'),ui_text('annotation.build_label_list.051')])
@@ -126,12 +122,15 @@ def build_label_list(w,layout):
     row=QHBoxLayout();row.setContentsMargins(0,0,0,0);row.setSpacing(6)
     w.zoom_button=QPushButton(ui_text('annotation.build_label_list.025'));w.zoom_button.clicked.connect(w.zoom_selected);row.addWidget(w.zoom_button,1)
     w.delete_button=QPushButton(ui_text('action.delete'));w.delete_button.setProperty('role','danger');w.delete_button.clicked.connect(w.delete_selected);row.addWidget(w.delete_button,1);layout.addLayout(row)
-    w.accept_button=QPushButton(w);w.accept_button.clicked.connect(w.accept_selected);w.accept_button.hide()
 
 
 def build_export(w,layout):
     export_group=QGroupBox(ui_text('annotation.build_export.028'));w.export_group=export_group;export_layout=card_layout(export_group)
     form=QFormLayout();form.setHorizontalSpacing(6);form.setVerticalSpacing(6)
+    from ...export_settings import VECTOR_FORMATS
+    w.export_kind=CenteredComboBox();w.export_kind.setMinimumWidth(0);w.export_kind.setAccessibleName('导出格式')
+    for name,suffix,_ in VECTOR_FORMATS:w.export_kind.addItem(name,suffix)
+    form.addRow('导出格式',w.export_kind)
     w.export_crs_input=QLineEdit();w.export_crs_input.setAlignment(Qt.AlignmentFlag.AlignCenter);w.export_crs_input.setMinimumWidth(0);w.export_crs_input.editingFinished.connect(w.commit_export_crs)
     w.export_crs_input.setAccessibleName('标签投影');w.export_crs_input.setPlaceholderText('—');form.addRow('标签投影',w.export_crs_input)
     w.export_crs_input.setToolTip(ui_text('annotation.build_export.032'))
@@ -139,7 +138,8 @@ def build_export(w,layout):
     w.export_label_field_input.setAccessibleName('标签字段名');w.export_label_field_input.setPlaceholderText('class_value')
     w.export_label_field_input.setToolTip('导出属性表中存放标签值的字段名，默认 class_value。支持字母、汉字、数字和下划线；SHP 最多 10 个 UTF-8 字节。')
     w.export_label_field_input.editingFinished.connect(w.commit_export_label_field);form.addRow('标签字段名',w.export_label_field_input);export_layout.addLayout(form)
-    w.vector_export_button=QPushButton('导出标签');w.vector_export_button.clicked.connect(lambda:w.export('gpkg'))
+    w.export_kind.currentIndexChanged.connect(lambda _index:w.export_format_changed())
+    w.vector_export_button=QPushButton('导出标签');w.vector_export_button.clicked.connect(lambda:w.export())
     export_layout.addWidget(w.vector_export_button);layout.addWidget(export_group)
-    export_group.setFixedHeight(150)
+    export_group.setFixedHeight(188)
 

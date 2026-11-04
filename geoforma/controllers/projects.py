@@ -4,12 +4,15 @@ from ..ui.text import ui_text
 import copy, traceback, time
 from pathlib import Path
 from PySide6.QtCore import QTimer
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 from ..domain import new_project, data_dir
 from ..storage import save_project, project_snapshot
 from ..tasks import Task
 from ..model_preferences import last_model
 from ..operation_state import interaction_locked,can_start_operation
+from ..project_files import PROJECT_SUFFIX,RECOVERY_NAME,SAVE_FILTER,OPEN_FILTER,new_project_path,project_name
 
 
 class ProjectWorkflow:
@@ -21,7 +24,7 @@ class ProjectWorkflow:
         return recovery_target(self.settings,root,data_dir())
 
     def recover_previous_work(self):
-        if not can_start_operation(self) or self.autosave_task or self.project_path or self.project['images'] or self.project['labels']:return
+        if not can_start_operation(self) or self.autosave_task or self.project_path or self.project['images'] or self.project['labels'] or self.project.get('references'):return
         path=self.previous_work()
         if path:self.request_project_open(path,recover_latest=True)
         else:self.statusBar().showMessage(ui_text('project.no_recovery'),3000);self.update_controls()
@@ -33,11 +36,17 @@ class ProjectWorkflow:
 
     def refresh_project_title(self):
         path=self.project_path
-        name=path.name if path else ui_text('projects.new.001')
-        if path:
-            for suffix in ('.geoforma.json','.json'):
-                if name.lower().endswith(suffix):name=name[:-len(suffix)];break
+        name=project_name(path) if path else ui_text('projects.new.001')
         self.project_title.setText(name);self.project_title.setToolTip(str(path.resolve()) if path else '')
+        self.project_directory_button.setEnabled(bool(path))
+
+    def open_project_directory(self):
+        if not self.project_path:return
+        directory=self.project_path.parent
+        if not directory.is_dir():
+            QMessageBox.warning(self,'项目目录不可用','项目所在文件夹不存在或不可访问。若项目已移动，请从新位置重新打开项目。')
+        elif not QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory.resolve()))):
+            QMessageBox.warning(self,'无法打开项目目录','无法打开项目所在文件夹，请检查系统文件管理器设置。')
 
     def capture_workspace(self):
         draft={k:copy.deepcopy(v) for k,v in self.draft.items() if k not in ('logits','choices')}
@@ -70,11 +79,11 @@ class ProjectWorkflow:
             return False
         # Opening and closing a blank workspace must preserve previous work.
         self.project_saves.retry_failed()
-        if self.dirty and (self.project_path or self.project['images'] or self.project['labels']):
+        if self.dirty and (self.project_path or self.project['images'] or self.project.get('references')):
             from ..resource_location import current_resource_dir
             from ..project_save_queue import ProjectSaveRequest
             self.capture_workspace()
-            try:path=Path(str(self.project_path)+'.autosave') if self.project_path else current_resource_dir()/'recovery'/'untitled.geoforma.json'
+            try:path=self.project_path if self.project_path else current_resource_dir()/'recovery'/RECOVERY_NAME
             except (OSError,ValueError,RuntimeError):path=None
             if path is None:
                 self.log_message(ui_text('projects.autosave_unavailable'))
@@ -103,8 +112,10 @@ class ProjectWorkflow:
         path=request.path;original_path=request.project_path
         def save_snapshot(t):
             if original_path is None and require_resource_dir()!=path.parent.parent:raise RuntimeError('资源目录已更改，自动保存已取消。')
-            save_project(request.snapshot,path)
-            if original_path is not None:save_project(request.snapshot,original_path)
+            if original_path is not None:
+                if not original_path.is_file():raise RuntimeError('项目文件不存在或已移动，自动保存已暂停；请先将项目文件移回原位置。')
+                save_project(request.snapshot,original_path)
+            else:save_project(request.snapshot,path)
         task=Task(save_snapshot);self.autosave_task=task
         self.background_activity.set('autosave','自动保存',request.title,task)
         def saved(_):
@@ -134,11 +145,14 @@ class ProjectWorkflow:
     def save(self):
         if interaction_locked(self):return
         path=self.project_path
+        first_save=path is None
         if not path:
-            value,_=QFileDialog.getSaveFileName(self,ui_text('projects.save.004'),str(path or Path.cwd()/'project.geoforma.json'),'GeoForma (*.geoforma.json)')
+            value,_=QFileDialog.getSaveFileName(self,ui_text('projects.save.004'),str(Path.cwd()/('project'+PROJECT_SUFFIX)),SAVE_FILTER)
             if not value:return
-            path=Path(value)
-        self.capture_workspace();self.project['name']=path.name.replace('.geoforma.json','')
+            path=new_project_path(value)
+            if path!=Path(value) and path.exists():
+                if QMessageBox.question(self,'替换文件',f'文件已存在，是否替换？\n{path}',QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,QMessageBox.StandardButton.No)!=QMessageBox.StandardButton.Yes:return
+        self.capture_workspace();self.project['name']=project_name(path)
         snapshot=project_snapshot(self.project)
         order=self.project_saves.next_order()
         try:
@@ -146,18 +160,30 @@ class ProjectWorkflow:
             # synchronous API safe for existing automation as well.
             self.storage_pool.waitForDone()
             save_project(snapshot,path);self.project_saves.saved(path,order)
+            if first_save:
+                # The saved snapshot supersedes queued recovery writes for this
+                # workspace; no later edit can occur while this method blocks.
+                for queue in (self.project_saves.pending,self.project_saves.failed):
+                    for key,request in list(queue.items()):
+                        if request.epoch==self.project_epoch and request.project_path is None:queue.pop(key,None)
+                try:
+                    from ..recovery import discard_saved_untitled
+                    from ..resource_location import current_resource_dir
+                    discard_saved_untitled(current_resource_dir(),self.project.get('cache_id'))
+                except (OSError,ValueError,RuntimeError):
+                    self.log_message('项目已保存，但未能清理未命名项目的恢复记录。')
             self.project_path=path;self.dirty=False;self.refresh_project_title();self.log_message(ui_text('projects.save.009')+str(path));self.settings.setValue('last_project',str(path));self.settings.setValue('recovery/last_work',str(path));self.update_controls()
         except Exception:self.error(traceback.format_exc())
 
     def new(self):
         if not can_start_operation(self) or self.reshape_session is not None:return
         self.remember_current_model()
-        if self.candidate_task:self.candidate_task.cancel()
+        if self.label_index_task:self.label_index_task.cancel()
         if self.autosave() is False:return
-        self.smoother.clear();self.project_epoch+=1;self.preparation.reset();self.image_sessions.clear();self.project=new_project(last_model(self.settings));self.project_path=None;self.image=None;self.draft={};self.label_undo=[];self.label_redo=[];self.prompt_undo=[];self.prompt_redo=[];self.pending_review=None;self.selected_id=None;self.selected_ids.clear();self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation,clear_cache=True);self.view.set_image(0,0);self.refresh_classes();self.refresh_images();self.refresh_labels();self.update_draft_info();self.update_controls();self.refresh_project_title();self.dirty=False
+        self.smoother.clear();self.project_epoch+=1;self.preparation.reset();self.image_sessions.clear();self.project=new_project(last_model(self.settings));self.project_path=None;self.image=None;self.draft={};self.label_undo=[];self.label_redo=[];self.prompt_undo=[];self.prompt_redo=[];self.selected_id=None;self.selected_ids.clear();self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation,clear_cache=True);self.view.set_image(0,0);self.refresh_classes();self.refresh_images();self.refresh_labels();self.update_draft_info();self.update_controls();self.refresh_project_title();self.dirty=False
         self.mode_histories.clear();self.auto_apply.setChecked(True)
         self.single_polygon.setChecked(self.project['workspace']['single_polygon'])
-        self.label_lookup.clear();self.candidate_indexes.clear();self.candidate_key=None;self.candidate_index=None
+        self.label_lookup.clear();self.label_indexes.clear();self.label_index_key=None;self.label_index=None
         self.clear_project_cache()
 
     def clear_project_cache(self,callback=None):
@@ -166,7 +192,7 @@ class ProjectWorkflow:
 
     def open_dialog(self):
         if not can_start_operation(self):return
-        path,_=QFileDialog.getOpenFileName(self,ui_text('projects.open_dialog.002'),str(self.project_path or Path.cwd()),'GeoForma (*.json *.autosave *.bak)')
+        path,_=QFileDialog.getOpenFileName(self,ui_text('projects.open_dialog.002'),str(self.project_path or Path.cwd()),OPEN_FILTER)
         if path:self.request_project_open(path)
 
     def open_project(self,path,recover_latest=False,_loaded=None):
@@ -183,8 +209,18 @@ class ProjectWorkflow:
             if _loaded is None:
                 if self.autosave() is False:return False
                 if self.project_path and Path(path)==self.project_path and self.autosave_task:self.save()
-                actual=self.project_source(path,recover_latest)
-                _loaded=prepare_project(actual,(self.view.viewport().width(),self.view.viewport().height()))
+                actual=Path(path)
+                from ..storage import load_project
+                from ..missing_sources import missing_sources
+                project=load_project(actual);changed=False
+                if missing_sources(project):
+                    changed=self.resolve_missing_project_sources(project)
+                    if changed is None:return False
+                if changed:
+                    from ..missing_sources import validate_resolved_project
+                    validate_resolved_project(project)
+                _loaded=prepare_project(actual,(self.view.viewport().width(),self.view.viewport().height()),project=project)
+                _loaded.sources_changed=changed
             from ..resource_location import require_resource_dir
             cache_root=require_resource_dir()
             if not hasattr(_loaded,'cache_cleared'):_loaded.cache_cleared=self.service.activate_project(cache_root,_loaded.project['cache_id'])

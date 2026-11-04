@@ -1,9 +1,9 @@
 """Background project staging and a single signal-blocked workbench commit."""
-import copy,traceback
+import copy,traceback,threading
 from contextlib import contextmanager
 from pathlib import Path
 from PySide6.QtCore import Qt,QTimer,QSignalBlocker,QRectF
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox,QFileDialog
 from ..tasks import Task
 from ..domain import data_dir
 from ..domain import digest
@@ -14,7 +14,7 @@ from ..ui.text import ui_text
 
 @contextmanager
 def blocked_controls(window):
-    names=('images','classes','auto_apply','single_polygon','label_filter',
+    names=('images','classes','auto_apply','single_polygon',
            'smooth_enabled','smooth_value','raw_view_action','view')
     blockers=[QSignalBlocker(getattr(window,name)) for name in names]
     updates=window.updatesEnabled();window.setUpdatesEnabled(False)
@@ -25,11 +25,28 @@ def blocked_controls(window):
 
 
 class ProjectLoadingWorkflow:
-    def project_source(self,path,recover_latest=False):
-        actual=Path(path);recovery=Path(str(path)+'.autosave')
-        if recovery.exists() and (not actual.exists() or recovery.stat().st_mtime_ns>actual.stat().st_mtime_ns):
-            if recover_latest or QMessageBox.question(self,ui_text('projects.open_project.010'),ui_text('projects.open_project.011'))==QMessageBox.StandardButton.Yes:actual=recovery
-        return actual
+    def resolve_missing_project_sources(self,project):
+        from ..missing_sources import missing_sources,relink_source,remove_source
+        changed=False
+        for kind,source in missing_sources(project):
+            while True:
+                name=source.get('name') or Path(source['path']).name
+                detail=('移除影像将同时移除其标注，并清除项目的撤销和重做记录。' if kind=='images' else '移除参考影像不会删除磁盘上的文件。')
+                box=QMessageBox(QMessageBox.Icon.Warning,'找不到数据',f'{name}\n原路径：{source["path"]}\n\n{detail}',parent=self)
+                locate=box.addButton('选择新位置',QMessageBox.ButtonRole.AcceptRole)
+                remove=box.addButton('从项目移除',QMessageBox.ButtonRole.DestructiveRole)
+                box.addButton('取消打开',QMessageBox.ButtonRole.RejectRole);box.exec()
+                if box.clickedButton()==locate:
+                    path,_=QFileDialog.getOpenFileName(self,'选择数据的新位置',str(Path(source['path']).parent),'影像文件 (*.tif *.tiff *.vrt *.img);;所有文件 (*)')
+                    if not path:continue
+                    try:relink_source(source,path,project,kind)
+                    except Exception as error:QMessageBox.warning(self,'无法使用所选数据',str(error));continue
+                    changed=True;break
+                if box.clickedButton()==remove:
+                    if QMessageBox.question(self,'确认移除',f'确定从项目移除“{name}”吗？\n{detail}')!=QMessageBox.StandardButton.Yes:continue
+                    remove_source(project,kind,source);changed=True;break
+                return None
+        return changed
 
     def request_project_open(self,path,recover_latest=False):
         if self.task or self.reshape_session is not None or self.loading_task or self.project_transition or self.closing:return False
@@ -40,10 +57,10 @@ class ProjectLoadingWorkflow:
             self.statusBar().showMessage('请先完成资源迁移，再打开项目。',6000);return False
         try:
             if self.autosave() is False:return False
-            actual=self.project_source(path,recover_latest)
+            actual=Path(path)
         except Exception:self.error(traceback.format_exc());return False
         self.auto_apply_timer.stop();self.render_timer.stop()
-        if self.candidate_task:self.candidate_task.cancel()
+        if self.label_index_task:self.label_index_task.cancel()
         from ..ui.project_transition import ProjectTransition
         self.project_transition=ProjectTransition(self,recover_latest)
         size=(self.view.viewport().width(),self.view.viewport().height())
@@ -51,7 +68,21 @@ class ProjectLoadingWorkflow:
             from ..resource_location import require_resource_dir
             self.wait_for_project_saves(task)
             root=require_resource_dir()
-            loaded=prepare_project(actual,size,task)
+            from ..storage import load_project
+            from ..missing_sources import missing_sources
+            project=load_project(actual);changed=False
+            if missing_sources(project):
+                event=threading.Event();answer={'changed':None}
+                task.signals.preview.emit((project,event,answer))
+                while not event.wait(.05):task.check()
+                task.check()
+                if answer['changed'] is None:task.cancel();task.check()
+                changed=answer['changed']
+            if changed:
+                from ..missing_sources import validate_resolved_project
+                validate_resolved_project(project)
+            loaded=prepare_project(actual,size,task,project=project)
+            loaded.sources_changed=changed
             task.check();task.signals.progress.emit(0,0,'清理旧项目的影像缓存…')
             loaded.cache_cleared=self.service.activate_project(root,loaded.project['cache_id'])
             if not loaded.cache_cleared:
@@ -89,7 +120,13 @@ class ProjectLoadingWorkflow:
         def progress(current,total,text):
             if settled or task.cancel_event.is_set() or self.closing or self.project_transition is not transition:return
             transition.set_stage(text);self.progress_presentation.update_loading(current,total,text)
+        def resolve(payload):
+            project,event,answer=payload
+            try:
+                if not self.closing and not task.cancel_event.is_set():answer['changed']=self.resolve_missing_project_sources(project)
+            finally:event.set()
         task.signals.progress.connect(progress)
+        task.signals.preview.connect(resolve)
         task.signals.result.connect(done);task.signals.error.connect(failed);task.signals.finished.connect(finished)
         self.load_pool.start(task);return True
 
@@ -121,23 +158,24 @@ class ProjectLoadingWorkflow:
                 self.preparation.reset();self.image_sessions.clear()
                 self.state=WorkbenchState(loaded.project,project_path=Path(path),image=loaded.image,draft=loaded.draft,mode_index=loaded.mode_index,project_epoch=epoch)
                 self.runtime_status=runtime
-                self.label_lookup.clear();self.candidate_indexes.clear();self.candidate_key=None;self.candidate_index=None
+                self.label_lookup.clear();self.label_indexes.clear();self.label_index_key=None;self.label_index=None
                 self.render_generation+=1;self.raster_renderer.reset(self.render_generation,clear_cache=True)
                 from ..resource_location import current_resource_dir
                 roots=[data_dir()]
                 try:roots.append(current_resource_dir())
                 except (OSError,ValueError):pass
-                untitled=[root/'recovery'/'untitled.geoforma.json' for root in roots]
-                if Path(path).resolve() in {candidate.resolve() for base in untitled for candidate in (base,Path(str(base)+'.autosave'),Path(str(base)+'.bak'))}:self.project_path=None
+                from ..project_files import RECOVERY_NAME
+                untitled=[root/'recovery'/RECOVERY_NAME for root in roots]
+                if Path(path).resolve() in {base.resolve() for base in untitled}:self.project_path=None
                 state=self.project.get('workspace',{})
                 self.tool_modes=dict(state.get('tools',{}))
-                self.label_filter.setCurrentIndex(0)
                 self.auto_apply.setChecked(state.get('auto_apply',True));self.single_polygon.setChecked(state.get('single_polygon',False))
                 raw_view=state.get('raw_view',False);self.raw_view_action.setChecked(True);self.refresh_classes()
                 session={}
                 if self.image:
                     session=self.load_image_session();self.draft=loaded.draft
-                if getattr(loaded,'nodata_model_changed',()):self.invalidate_model_drafts(set(loaded.nodata_model_changed))
+                changed_images={image['id'] for image in self.project['images'] if image.pop('_relinked',False)}
+                if changed_images:self.invalidate_model_drafts(changed_images)
                 chosen=state.get('class_id') or session.get('class_id') or self.draft.get('class_id')
                 if chosen is not None:self.classes.setCurrentIndex(self.classes.findData(chosen))
                 self.restore_label_histories();self.refresh_images();self.refresh_info();self.refresh_project_title()
@@ -150,11 +188,14 @@ class ProjectLoadingWorkflow:
                     elif loaded.view_window:self.view.fitInView(QRectF(*loaded.view_window),Qt.AspectRatioMode.KeepAspectRatio)
                     self.view.update_scrollbar_visibility()
                 self.view.set_overlay_visibility(True)
-                self.candidate_index=loaded.index;self.candidate_key=self.candidate_signature()
-                self.candidate_indexes[self.annotation_context()]=(self.candidate_key,self.candidate_index)
+                self.label_index=loaded.index;self.label_index_key=self.label_index_signature()
+                self.label_indexes[self.annotation_context()]=(self.label_index_key,self.label_index)
                 if loaded.frame is not None:
                     full=[0,0,self.image['width'],self.image['height']]
-                    if loaded.overview is not None:self.view.show_raster(*loaded.overview,full,overview=True)
+                    if loaded.overview is not None:
+                        self.raster_renderer.prime(self.image,full,min(loaded.size,1600),loaded.overview)
+                        self.view.show_raster(*loaded.overview,full,overview=True)
+                    self.raster_renderer.prime(self.image,loaded.window,loaded.size,loaded.frame)
                     self.view.show_raster(*loaded.frame,loaded.window,overview=loaded.window==full)
                     self.view.layers.raster_epoch=self.render_generation
                 elif self.image:
@@ -177,10 +218,11 @@ class ProjectLoadingWorkflow:
                 self.raw_view_action.setChecked(not raw_view);self.view.set_overlay_visibility(not raw_view);self.update_controls()
                 self.settings.setValue('last_project',str(path));self.settings.setValue('recovery/last_work',str(path))
                 self.log_message(ui_text('projects.open_project.005'));self.dirty=False
-                if getattr(loaded,'reconciled_caches',0) or getattr(loaded,'nodata_migration_changed',False):self.mark_dirty()
+                if getattr(loaded,'reconciled_caches',0) or getattr(loaded,'sources_changed',False):self.mark_dirty()
                 self.raster_list_sizer.settle()
                 self.render_timer.stop();self.auto_apply_timer.stop()
         finally:self.restoring_project=False
+        if self.dirty:self.autosave_debounce.start()
         if self.project_transition is None:self.complete_project_open()
         return True
 

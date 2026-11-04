@@ -7,11 +7,7 @@ import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import Point,shape
 from geoforma.raster import inspect_source,make_recipe,read_rgb
-from geoforma.domain import new_project
-from geoforma.storage import save_project
-from geoforma.project_loading import prepare_project
 from test_reference_missing_values import reference
-from test_workbench import workbench
 
 
 @pytest.mark.parametrize('crs',['EPSG:3857',None])
@@ -141,29 +137,3 @@ def test_reshape_allows_manual_pixels_in_missing_area(tmp_path,native):
     assert geometry.covers(Point(25.5,31.5)) and geometry.covers(Point(23.5,31.5))
 
 
-def test_old_project_invalidates_only_affected_model_cache(tmp_path):
-    image,_=reference(tmp_path);image['model_recipe']=copy.deepcopy(image['display_recipe'])
-    image.update(ready=True,prepared_full_signature='old',prepared_cache_revision='old')
-    project=new_project();project['images']=[image];project['workspace']['image_id']=image['id']
-    path=tmp_path/'work.geoforma.json';save_project(project,path)
-    loaded=prepare_project(path,(100,100),read_frame=False)
-    assert loaded.nodata_model_changed==(image['id'],) and loaded.nodata_migration_changed
-    assert not loaded.image['ready'] and 'prepared_full_signature' not in loaded.image
-    assert loaded.image['model_recipe']['ranges'][0][0]>.1
-    assert loaded.image['model_recipe']['validity_policy']['value']==-9999
-    assert image['ready'] and image['model_recipe']['ranges'][0][0]==-9999
-
-
-def test_recovery_preserves_labels_and_invalidates_stale_model_draft(workbench,tmp_path):
-    from shapely.geometry import box,mapping
-    w,app,wait,errors=workbench
-    image,_=reference(tmp_path);image['model_recipe']=copy.deepcopy(image['display_recipe'])
-    image.update(ready=True,prepared_full_signature='old',prepared_cache_revision='old')
-    project=new_project();project['images']=[image]
-    project['labels']=[dict(id='saved',image_id=image['id'],status='confirmed',class_id=1,geometry=mapping(box(2,2,6,6)))]
-    project['workspace'].update(image_id=image['id'],draft={'points':[[10,10,1]],'geometry':mapping(box(8,8,14,14))})
-    path=tmp_path/'old.geoforma.json';save_project(project,path)
-    assert w.open_project(path)
-    assert len(w.project['labels'])==1 and w.project['labels'][0]['id']=='saved'
-    assert w.draft['points']==[[10,10,1]] and w.draft['pending']
-    assert not w.image['ready'] and w.dirty and not errors

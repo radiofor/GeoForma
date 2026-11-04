@@ -1,10 +1,23 @@
 """Shared source paths for portable projects and non-destructive publication."""
 import os
+import copy
 from pathlib import Path
 
 
 def project_sources(project):
     return [*project.get('images',[]),*project.get('references',[])]
+
+
+def guard_snapshot(project):
+    """Detach only the paths needed to protect every source during publication."""
+    result=[]
+    for source in project_sources(project):
+        record={key:copy.deepcopy(source[key]) for key in ('path','source_paths') if key in source}
+        provenance=source.get('import_list')
+        if provenance:
+            record['import_list']={key:copy.deepcopy(provenance[key]) for key in ('source','source_paths') if key in provenance}
+        result.append(record)
+    return result
 
 
 def relocate_sources(project,base,relative=False):
@@ -27,8 +40,8 @@ def relocate_sources(project,base,relative=False):
 
 class SourceGuard:
     """Index once per operation, including reference rasters and VRT dependencies."""
-    def __init__(self,sources):
-        self.paths=set();inspected=set()
+    def __init__(self,sources,open_files=None):
+        self.paths=set();inspected=set();open_files=open_files or {}
         for source in sources:
             self.paths.add(Path(source['path']).resolve())
             self.paths.update(Path(p).resolve() for p in source.get('source_paths',[]))
@@ -39,10 +52,13 @@ class SourceGuard:
             # Legacy ordinary TIFF records need no raster read for every autosave.
             path=Path(source['path'])
             if path.suffix.lower()=='.vrt' and path.resolve() not in inspected and path.exists():
-                import rasterio
-                with rasterio.open(path) as dataset:
-                    self.paths.update(Path(p).resolve() for p in dataset.files)
-                inspected.add(path.resolve())
+                resolved=path.resolve()
+                if resolved in open_files:files=open_files[resolved]
+                else:
+                    import rasterio
+                    with rasterio.open(path) as dataset:files=dataset.files
+                self.paths.update(Path(p).resolve() for p in files)
+                inspected.add(resolved)
 
     def check(self,*outputs):
         if any(Path(path).resolve() in self.paths for path in outputs):

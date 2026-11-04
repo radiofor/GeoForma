@@ -8,7 +8,7 @@ def test_empty_workbench_keeps_project_actions_available(workbench, monkeypatch)
     calls = []
     monkeypatch.setattr(w.service, 'prepare_model', lambda *args: calls.append(args))
     w.project_path = None
-    monkeypatch.setattr(w, 'previous_work', lambda: 'previous.geoforma.json')
+    monkeypatch.setattr(w, 'previous_work', lambda: 'previous.gfm')
     w.update_controls()
     w.auto_prepare = True
     w.remind_resources(); w.pump_preparation(); app.processEvents()

@@ -17,6 +17,7 @@ def normalize_model(config):
     backend=config.get('backend','sam');variant=config['variant'];model_spec(variant,backend)
     device=config.get('device','cuda')
     if device not in ('cuda','cpu'):raise ValueError('Unsupported model device preference.')
+    if config.get('execution','auto') not in ('auto','native'):raise ValueError('Unsupported model runtime.')
     from .weights import default_checkpoint
     path=config.get('checkpoint','')
     if not isinstance(path,str):raise ValueError('Checkpoint preference must be a path string.')
@@ -39,6 +40,8 @@ def last_model(settings):
 def remember_model(settings,config):
     try:value=normalize_model(config)
     except (TypeError,ValueError,KeyError):return False
-    settings.setValue(LAST_MODEL_KEY,json.dumps(value,ensure_ascii=False,sort_keys=True))
+    encoded=json.dumps(value,ensure_ascii=False,sort_keys=True)
+    if settings.value(LAST_MODEL_KEY,'')==encoded:return settings.status()==settings.Status.NoError
+    settings.setValue(LAST_MODEL_KEY,encoded)
     settings.sync()
     return settings.status()==settings.Status.NoError

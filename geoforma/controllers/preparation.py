@@ -2,7 +2,7 @@
 import copy
 from PySide6.QtCore import QTimer
 from ..domain import digest
-from ..model_requests import model_image
+from ..raster_snapshot import image_snapshot
 from ..workflow import full_bounds,preparation_signature,fully_prepared,preparation_window
 from ..ui.text import ui_text
 
@@ -59,7 +59,7 @@ class PreparationWorkflow:
 
     def start_preparation(self,target):
         if not self.ensure_model_resources():return
-        image=model_image(target);config=copy.deepcopy(self.project['model']);bounds=full_bounds(target)
+        image=image_snapshot(target);config=copy.deepcopy(self.project['model']);bounds=full_bounds(target)
         target['ready']=False;target['preparation_state']='preparing';self.preparing_id=target['id'];self.refresh_images()
         def done(result):
             if result.get('checkpoint'):self.project['model']['checkpoint']=result['checkpoint']

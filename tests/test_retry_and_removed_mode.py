@@ -45,12 +45,12 @@ def test_whole_image_mode_has_no_entry_or_service_execution(workbench):
     assert w.mode_index==0 and w.mode_settings.currentWidget() is w.prompt_group
     assert not hasattr(w,'auto_group') and not hasattr(w,'auto_regenerate')
     assert not hasattr(w,'automatic')
-    with pytest.raises(ValueError,match='已移除'):ModelService().automatic(None,None,None,None,None)
+    assert not hasattr(ModelService(),'automatic')
     with pytest.raises(ValueError,match='已移除'):ModelEngine().predict(None,None,{'full_image':True},None)
 
 
-def test_legacy_labels_remain_available(workbench):
+def test_confirmed_labels_remain_available(workbench):
     w,app,wait,errors=workbench
     image=fake_image('one');w.project['images']=[image];w.image=image
-    w.project['labels']=[{'id':'old','image_id':'one','annotation_mode':'automatic'}]
+    w.project['labels']=[{'id':'saved','image_id':'one','annotation_mode':'individual','status':'confirmed'}]
     assert list(w.current_labels())==w.project['labels']

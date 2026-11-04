@@ -48,14 +48,14 @@ def test_project_save_cannot_overwrite_source_raster(raster_image):
     {'editing_state':'invalid'},{'pending':'yes'},
 ])
 def test_bad_restored_prompts_are_rejected_before_use(raster_image,tmp_path,draft):
-    path=tmp_path/'bad.json';project=new_project();project['images']=[raster_image]
+    path=tmp_path/'bad.gfm';project=new_project();project['images']=[raster_image]
     project['workspace']={'image_id':raster_image['id'],'draft':draft}
     path.write_text(json.dumps(project),encoding='utf-8')
     with pytest.raises(ValueError):load_project(path)
 
 
 def test_invalid_session_container_and_nested_history_are_rejected(raster_image,tmp_path):
-    project=new_project();project['images']=[raster_image];path=tmp_path/'bad.json'
+    project=new_project();project['images']=[raster_image];path=tmp_path/'bad.gfm'
     for sessions in ([],{'other':{}},{'individual':{'undo':[{'points':[[0,float('inf'),1]]}]}}):
         raster_image['mode_sessions']=sessions;path.write_text(json.dumps(project),encoding='utf-8')
         with pytest.raises(ValueError):load_project(path)
@@ -155,6 +155,6 @@ def test_bad_project_cannot_partially_replace_live_workbench(workbench,damage):
     elif damage=='runs':image['candidate_runs']={'invalid':[]}
     elif damage=='range':bad['workspace']={'candidate_range':[0,'bad',False]}
     elif damage=='view':image['mode_sessions']={'individual':{'view':[0,0,float('inf'),10]}}
-    path=tmp/'bad_project.json';path.write_text(json.dumps(bad),encoding='utf-8')
+    path=tmp/'bad_project.gfm';path.write_text(json.dumps(bad),encoding='utf-8')
     errors=[];w.error=errors.append;w.open_project(path)
     assert errors and w.project is original and w.project['labels'][0]['id']=='target'

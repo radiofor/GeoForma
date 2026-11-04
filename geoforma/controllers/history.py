@@ -27,42 +27,9 @@ class HistoryWorkflow:
         self.label_redo.append(self.restore_label_entries(self.label_undo.pop()))
         self.selected_id=None;self.selected_ids.clear();self.refresh_labels();self.mark_dirty()
 
-    def undo_all_labels(self):
-        if not self.label_undo or self.foreground_task_active() or self.reshape_session is not None:return
-        # Check the entire history before changing anything: a modified target
-        # can occur in an older operation, not just the newest one.
-        entries=[entry for operation in self.label_undo for entry in operation]
-        if not self.prepare_label_history(entries):return
-        if len(self.project['labels'])*len(self.label_undo)>100000:
-            from ..label_history import replay_all
-            labels=tuple(self.project['labels']);undo=tuple(tuple(operation) for operation in self.label_undo);redo=tuple(self.label_redo)
-            images=[{'id':image['id'],'dismissed_candidates':tuple(image.get('dismissed_candidates',()))} for image in self.project['images']]
-            context=self.annotation_context()
-            def done(result):
-                if context!=self.annotation_context():return
-                self.project['labels']=result['labels'];self.label_undo=[];self.label_redo=result['redo']
-                for image in self.project['images']:
-                    if image['id'] in result['dismissed']:image['dismissed_candidates']=result['dismissed'][image['id']]
-                self.selected_id=None;self.selected_ids.clear();self.pending_review=None
-                self.refresh_labels();self.mark_dirty();self.autosave()
-            self.run('全部撤销标签',lambda task:replay_all(labels,undo,redo,images,task),done,kind='history')
-            return
-        while self.label_undo:
-            self.label_redo.append(self.restore_label_entries(self.label_undo.pop()))
-        self.selected_id=None;self.selected_ids.clear();self.pending_review=None
-        self.refresh_labels();self.mark_dirty();self.autosave()
-
     def restore_label_entries(self,entries):
         from ..label_history import restore_entries
         self.project['labels'],reverse=restore_entries(self.project['labels'],entries)
-        ids={entry[0] for entry in entries}
-        restored={identifier for identifier,old,_ in entries if old};removed=ids-restored
-        for image in self.project['images']:
-            dismissed=set(image.get('dismissed_candidates',[]));dismissed-=restored
-            dismissed|={identifier for identifier,current,_ in reverse if identifier in removed and current and current['image_id']==image['id']}
-            image['dismissed_candidates']=sorted(dismissed)
-        if self.image and self.image not in self.project['images']:
-            self.image['dismissed_candidates']=sorted(set(self.image.get('dismissed_candidates',[]))-restored|removed)
         return reverse
 
     def redo_label(self):

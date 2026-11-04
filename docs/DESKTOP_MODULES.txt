@@ -4,17 +4,19 @@ GeoForma 桌面模块与渲染
 geoforma/window.py：创建窗口、状态、服务、线程池与信号连接；处理关闭及拖入影像。
 geoforma/workbench_state.py：项目、当前影像、提示、选择、历史和工作状态；不保存 Qt 控件。
 geoforma/project_save_queue.py：无 Qt 的快照合并、按提交顺序排队与失败重试；跨项目切换保留已接受的保存请求。
-geoforma/controllers/：项目、影像、模型、类别、后台任务、控件状态、候选、提示、预览、标签、导出、显示与独立模式切换等流程。
-geoforma/annotation_modes.py：标签模式归属、旧项目迁移；controllers/modes.py：模式草稿与历史隔离、模型设置变化时使交互草稿失效。
-geoforma/ui/panels/：影像面板、标注面板、状态区；候选、编辑器、列表、导出各有独立构建函数。
+geoforma/controllers/：项目、影像、模型、类别、后台任务、控件状态、提示、预览、标签、导出及显示流程。
+geoforma/controllers/modes.py：标注草稿与历史管理、模型设置变化时使交互草稿失效。
+geoforma/ui/panels/：影像面板、标注面板、状态区；编辑器、列表、导出各有独立构建函数。
 geoforma/ui/controls.py：统一按钮、百分比输入和滚动面板的默认行为。
 geoforma/ui/centered_combo.py：包含箭头预留宽度的下拉框居中绘制。
 geoforma/progress.py / ui/progress_bar.py：共享进度状态机与唯一进度条渲染器。
 geoforma/ui/task_progress.py：任务身份、阶段、计数和保留结果的工作台适配器。
 geoforma/operation_state.py / tool_state.py：项目切换边界及工具可用性规则。
 工具选择由统一入口激活并按模式记忆；selected_mode 与空间键临时平移分开。
-workspace.tool/tools 保存并恢复选择，规则见 TOOL_SELECTION_2026_10_24.txt。
+workspace.tool/tools 保存并恢复工具选择。
 geoforma/source_catalog.py：计算影像和参考的统一来源、路径迁移与输出保护。
+geoforma/raster_snapshot.py：为推理、重塑和导出生成隔离的影像快照，排除界面编辑会话。
+geoforma/label_index.py：缓存已确认标签的几何和空间索引，只对草稿附近的轮廓执行裁剪。
 geoforma/reference_catalog.py：参考身份、稳定合并及按主影像名称建立的只读索引。
 geoforma/ui/reference_switcher.py：参考按钮复用、滚动、固定尺寸与展开动画；不负责栅格读取。
 geoforma/contracts.py：模型输入、像元窗口和主影像/参考显示分配上限。
@@ -26,8 +28,8 @@ geoforma/runtime_profile.py：已验证的源码运行层及 Windows 发布依�
 geoforma/network.py：使用维护中的 CA 证书进行 HTTPS 下载，拒绝降级至 HTTP。
 geoforma/ui/label_table.py：LabelRow 数据契约、表格增量同步与选择显示。
 geoforma/ui/status_style.py：状态配色、徽标尺寸和状态列宽测量的统一来源，不导入 Qt 控件或工作流。
-geoforma/ui/label_status.py / label_summary.py：复用状态配置绘制列表状态及统计筛选按钮；类别管理文案统一在 ui/text.py。
-geoforma/ui/label_lookup.py：按影像和生成批次查询标签，避免反复扫描多影像项目。
+geoforma/ui/label_status.py：复用状态配置绘制列表状态；类别管理文案统一在 ui/text.py。
+geoforma/ui/label_lookup.py：按影像查询标签，避免反复扫描多影像项目。
 geoforma/rendering/raster_queue.py：RasterRequest 数据契约、视图请求调度、缓存与过期结果判断。
 geoforma/rendering/scene_layers.py：影像、轮廓、提示和预览图形的创建、复用和更新。
 geoforma/viewport.py：鼠标键盘输入、命中测试入口、平移缩放和场景坐标。
@@ -38,7 +40,7 @@ geoforma/viewport.py：鼠标键盘输入、命中测试入口、平移缩放和
 工作流程属于界面应用层，通过工作台已构建的状态和控件句柄协作；它们不宣称是无 Qt 的领域服务。
 界面流程采用职责明确的 mixin，集中在 MainWindow 组合，不使用全局状态或动态文件约定。
 WorkbenchState、LabelRow、RasterRequest 是显式对象；服务仍使用可序列化请求跨进程。
-MainWindow 保留原有公开操作接口，内部状态经显式属性桥接，旧项目格式可继续读取。
+MainWindow 通过显式属性桥接内部状态；项目文件统一使用 .gfm 后缀。
 
 渲染规则
 默认显示缓存上限 96 MiB，缓存的是降采样窗口；不读取整幅高分辨率 TIFF 数组。
@@ -49,20 +51,20 @@ MainWindow 保留原有公开操作接口，内部状态经显式属性桥接，
 更换波段时，新全图预览准备完成后移除旧细节图，避免混用波段。
 QGraphicsPixmapItem、轮廓、点与表格单元格复用；只在像素、几何、样式或结构变化时更新。
 当前模式的所有标签预先建立图形和路径，包括视图之外的部分；Qt 自动裁剪屏幕外绘制。
-不因视图变化删除标签图形；两种模式使用独立图形集合，切换只隐藏另一模式，切回复用本模式图形。
-候选索引按当前影像与模式分别缓存，异步结果只有身份和内容签名都匹配才更新当前显示。
-标签删除、候选集合改变或影像切换才清理相应图形；图形选择与命中仅查询当前模式。
+不因视图变化删除标签图形。
+标签索引按当前影像与模式分别缓存，异步结果只有身份和内容签名都匹配才更新当前显示。
+标签删除或影像切换才清理相应图形；图形选择与命中仅查询当前模式。
 点击命中使用场景空间索引查询附近图形，避免保留更多图形后每次点击遍历所有标签。
 悬停预览图元也复用；查看原图时提示、轮廓和预览一并隐藏。拉框过程中只显示框线。
 未变化表格跳过全部更新；选择只修改变化的行；删除保留其他图形和滚动位置。
-候选关系需后台重新计算时继续显示仍存在的旧轮廓，同一设置中不清空所有目标。
+标签索引需后台重新计算时继续显示仍存在的旧轮廓，同一设置中不清空所有目标。
 显示缓存独立于 SAM 特征缓存；没有改变 SAM 输入尺度、投影或模型权重。
 
 维护约定
 已保存标签记录与几何按不可变值处理：修改标签时替换记录或标签集合。
 geoforma/history.py 定义可序列化历史及快照：标签历史按模式保存，提示历史按影像与模式保存。
 后台自动保存冻结历史栈的结构，沿用不可变几何引用；大型几何的深拷贝与 JSON 编码在存储线程执行。
-推理请求不携带草稿、模式历史或候选工作状态，避免新增历史数据增加模型进程通信开销。
+推理请求不携带草稿或模式历史，避免新增历史数据增加模型进程通信开销。
 标签集合替换、追加或删除后会失效只读查询缓存；不要绕过流程原地替换同长度集合的单个记录。
 参考集合也按不可变值替换；元数据变更重绑当前记录，仅像素输入变化才重新请求底图。
 新建和加载项目时释放前一项目的平滑几何缓存，避免跨项目持续占用内存。
@@ -71,20 +73,13 @@ tools/audit_structure.py 输出架构清单；tools/clean_generated.py 默认预
 tools/audit_dependencies.py 仅向 OSV 发送依赖名称和版本；需得到用户对外查询授权。
 新增界面文字先加入 ui/text.py；动态文字用模板，控件构建不夹带模型推理。
 控件互斥与可用状态集中于 controllers/control_state.py，提示推理规则位于 controllers/prompts.py。
-性能报告：experiments/desktop_modularization_benchmark.json；脚本 tools/benchmark_desktop.py。
 报告使用真实影像窗口与模拟的 2000 个 UI 目标，不作为 SAM 精度、整幅处理速度或实机帧率指标。
-真实 SAM 2.1 Small GPU 的桌面提示、保存、项目重开及 GPKG 导出记录：experiments/modular_desktop/report.json。
-独立模式的真实 GPU 整幅预处理、候选生成、各模式保存与导出：experiments/independent_modes/report.json。
-点选快速掩膜与精确多边形反馈计时：experiments/prompt_feedback_benchmark.json；计时截至 UI 回调，不是显示器实际呈现时间。
-当前仅支持逐个目标标注，详见 SEGMENTATION_MODES.txt。历史全图功能已移除，旧标签保留。
-最新模块拆分及并发修复见 ARCHITECTURE_AUDIT_2026_10_28.txt。
+当前支持逐个目标标注，详见 SEGMENTATION_MODES.txt。
 
 当前更新为源码开发版；安装包未在此轮重新打包。
-本轮安全与发布限制见 PRESTORE_AUDIT_2026_10_25.txt。
 
 1.0.5 编辑历史边界
 -----------------
 controllers/history.py 集中管理上下文撤销/重做和复合历史，不再混放在标签显示与保存控制器中。
 draft_parts.py 为纯数据部件删除；label_validation.py 为无 Qt、无存储依赖的基础几何/编辑线校验。
 session_validation.py 与 project_validation.py 组合基础校验；项目确认保存也校验临时编号碰撞及批量重复引用。
-复合历史和资源安全审计见 V105_AUDIT_2026_11_01.txt；本轮不构建或发布安装包。

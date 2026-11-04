@@ -21,7 +21,7 @@ def main():
     from geoforma.domain import new_project
     from geoforma.model_catalog import model_spec,MODELS
     from geoforma.raster import inspect_source,make_recipe
-    from geoforma.services import ModelService
+    from geoforma.inference.client import ModelService
     from geoforma.exports import export_vector,export_raster
     from geoforma.backend import mask_geometry
     out=(args.output or ROOT/'experiments/audit/modular'/args.device).resolve();out.mkdir(parents=True,exist_ok=True)

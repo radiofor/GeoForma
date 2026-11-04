@@ -15,7 +15,7 @@ def default_resource_dir(root):
     root=Path(root)
     if os.environ.get('GEOFORMA_DATA_DIR'):return root
     if (root/'cache'/'active-project.json').is_file() or (root/'runtime'/'native-v1'/'current.json').is_file():return root
-    for cache_name in ('features','automatic'):
+    for cache_name in ('features',):
         folder=root/'cache'/cache_name
         if folder.is_dir() and any(p.is_file() and p.suffix.lower() in ('.pt','.json') for p in folder.iterdir()):return root
     models=root/'models'

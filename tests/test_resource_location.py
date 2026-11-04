@@ -43,9 +43,9 @@ def test_recovery_can_find_legacy_data_after_location_change(tmp_path):
         def value(self,*args):return ''
     legacy=tmp_path/'legacy';selected=tmp_path/'selected'
     (legacy/'recovery').mkdir(parents=True)
-    path=legacy/'recovery'/'untitled.geoforma.json';path.write_text('{}')
+    path=legacy/'recovery'/'untitled.gfm';path.write_text('{"images":[{}]}')
     assert recovery_target(Settings(),selected,legacy)==path
-    newer=selected/'recovery'/'untitled.geoforma.json';newer.parent.mkdir(parents=True);newer.write_text('{}')
+    newer=selected/'recovery'/'untitled.gfm';newer.parent.mkdir(parents=True);newer.write_text('{"images":[{}]}')
     import os
     os.utime(path,ns=(100,100));os.utime(newer,ns=(200,200))
     class RememberOld:

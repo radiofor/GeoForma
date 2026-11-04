@@ -2,7 +2,6 @@
 import threading,traceback
 from types import SimpleNamespace
 from .diagnostics import write_report
-from .domain import data_dir
 
 def resource_command(command,output,profile='cpu',files=None,model=None):
     messages=[]

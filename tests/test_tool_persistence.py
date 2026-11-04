@@ -63,7 +63,7 @@ def test_space_and_focus_loss_leave_selection_unchanged(workbench):
 @pytest.mark.parametrize('recovering',[False,True])
 def test_open_and_recovery_restore_the_saved_tool(workbench,saved_project,recovering):
     w,app,wait,errors=workbench;path,project=saved_project
-    project['workspace'].update(tool='negative',tools={'individual':'negative','automatic':'pan'})
+    project['workspace'].update(tool='negative',tools={'individual':'negative'})
     save_project(project,path)
     w.set_tool('pan');assert w.request_project_open(path,recover_latest=recovering)
     wait_loading(w,app);wait();assert_tool(w,'negative')
@@ -79,9 +79,9 @@ def test_legacy_project_keeps_current_compatible_tool(workbench,saved_project):
 
 
 @pytest.mark.parametrize('tool',['pan','select','reshape'])
-def test_saving_automatic_review_and_selecting_next_candidate_keep_tool(workbench,tool):
+def test_saving_and_selecting_next_label_keep_tool(workbench,tool):
     w,app,wait,errors=workbench;ready_window(w)
-    w.project['labels']=[dict(id=str(i),image_id='image',annotation_mode='automatic',status='candidate',class_id=None,
+    w.project['labels']=[dict(id=str(i),image_id='image',annotation_mode='individual',status='confirmed',class_id=1,
                               geometry=mapping(box(100+i*100,100,140+i*100,140)),window=[0,0,1024,1024]) for i in range(3)]
     w.refresh_labels();wait();w.set_tool(tool)
     w.select_label('0');w.edit_selected(locate=False);assert_tool(w,tool)
@@ -105,7 +105,7 @@ def test_switch_image_raw_view_and_temporary_busy_state_keep_tool(workbench):
 
 def test_reopening_suspended_reshape_restores_pan_and_construction_line(reshape_workbench):
     w,app,tmp=reshape_workbench;w.begin_reshape();w.reshape_session['stroke']=copy.deepcopy(OUT)
-    w.set_tool('pan');w.capture_workspace();path=tmp/'pan.geoforma.json';save_project(w.project,path)
+    w.set_tool('pan');w.capture_workspace();path=tmp/'pan.gfm';save_project(w.project,path)
     w.cancel_reshape();assert w.open_project(path)
     assert_tool(w,'pan')
     assert w.reshape_session is not None and w.reshape_session['stroke']==OUT
@@ -129,7 +129,7 @@ def test_manual_save_and_autosave_snapshot_keep_tool(workbench,tool):
     w,app,wait,errors=workbench;ready_window(w);w.set_tool(tool)
     w.save();wait();assert_tool(w,tool)
     assert load_project(w.project_path)['workspace']['tool']==tool
-    snapshot=project_snapshot(w.project);automatic=w.project_path.with_suffix('.autosave')
+    snapshot=project_snapshot(w.project);automatic=w.project_path.with_name('snapshot.gfm')
     save_project(snapshot,automatic);assert_tool(w,tool)
     assert load_project(automatic)['workspace']['tools']['individual']==tool
     assert not errors
@@ -139,12 +139,12 @@ def test_manual_save_and_autosave_snapshot_keep_tool(workbench,tool):
 def test_invalid_persisted_tool_is_rejected_before_commit(saved_project,damage):
     path,project=saved_project;project=copy.deepcopy(project);project['workspace'].update(damage)
     save_project(project,path)
-    with pytest.raises(ValueError,match='工具'):load_project(path)
+    with pytest.raises(ValueError,match='工具|标注模式'):load_project(path)
 
 
 @pytest.mark.parametrize('tool',['positive','negative','box','select_points'])
-def test_automatic_prompt_tool_preference_is_a_valid_project_setting(saved_project,tool):
+def test_removed_automatic_mode_is_rejected(saved_project,tool):
     path,project=saved_project;project=copy.deepcopy(project)
     project['workspace'].update(operation=1,tool=tool,tools={'automatic':tool})
-    save_project(project,path);loaded=load_project(path)
-    assert loaded['workspace']['tool']==tool and loaded['workspace']['tools']['automatic']==tool
+    save_project(project,path)
+    with pytest.raises(ValueError,match='标注模式'):load_project(path)

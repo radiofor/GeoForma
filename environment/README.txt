@@ -17,7 +17,6 @@ PyCharm 使用已有 GeoForma Conda 环境的解释器。
   security-runtime/geoforma-profile.json：源码运行层当前验证过的覆盖版本及验证记录。
   verification.json：最近一次完整环境检查结果。
   designer-verification.json：独立 Designer 启动检查结果。
-  *-install.json、*-plan.json：历史安装记录，可能包含中间尝试。
   锁文件不包含后续安全运行层的全部升级，不能单凭锁文件推断当前生效版本。
 
 复现步骤（在 Conda 终端中进入项目目录后执行）
@@ -51,7 +50,7 @@ PyCharm 使用已有 GeoForma Conda 环境的解释器。
   源代码中的 Unicode 测试字符串使用转义序列。
   check_environment.py 使用随机权重检查接口和设备，不评估分割质量。
   test_pretrained_sam.py 已通过官方 ViT-B 预训练权重测试，详见 SAM_TEST.txt。
-  后续真实影像、完整工作台和发行包验证见 experiments 与 release/qa。
+  发行前按当前代码和发行包重新执行验证。
 
 GeoPackage 创建选项
   GDAL 3.13.3 在本机回滚测试中出现可选要素计数缓存不一致：

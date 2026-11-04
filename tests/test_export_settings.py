@@ -38,12 +38,27 @@ def test_projection_edit_validation_and_default_controls():
     w.dirty=False;w.close();app.processEvents()
 
 
-@pytest.mark.parametrize('flag,expected',[(False,''),(True,'EPSG:3857'),(None,'EPSG:3857')])
-def test_legacy_projection_migration_and_save(tmp_path,flag,expected):
-    import json
-    from geoforma.storage import save_project,load_project
-    project=new_project();project['export_crs']='EPSG:3857'
-    if flag is not None:project['export_crs_fixed']=flag
-    path=tmp_path/'projection.geoforma.json';save_project(project,path);loaded=load_project(path)
-    assert loaded['export_crs']==expected and 'export_crs_fixed' not in loaded
-    save_project(loaded,path);assert 'export_crs_fixed' not in json.loads(path.read_text(encoding='utf-8'))
+def test_format_selection_shows_actual_geojson_crs_without_changing_project():
+    from PySide6.QtWidgets import QApplication
+    from geoforma.window import MainWindow
+    app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.autosave=lambda:None
+    w.project['export_crs']='EPSG:3857';w.refresh_export_crs(force=True)
+    w.export_kind.setCurrentIndex(w.export_kind.findData('.geojson'))
+    assert w.export_crs_input.text()=='EPSG:4326' and w.export_crs_input.isReadOnly() and not w.export_crs_input.isEnabled()
+    w.update_controls();assert not w.export_crs_input.isEnabled()
+    w.commit_export_crs();assert w.project['export_crs']=='EPSG:3857'
+    w.export_kind.setCurrentIndex(w.export_kind.findData('.shp'))
+    assert w.export_crs_input.text()=='EPSG:3857' and not w.export_crs_input.isReadOnly() and w.export_crs_input.isEnabled()
+    assert w.export_group.height()>=w.export_group.layout().minimumSize().height()
+    w.dirty=False;w.close();app.processEvents()
+
+
+@pytest.mark.parametrize('name,suffix,expected',[
+    ('labels','.shp','labels.shp'),('labels.gpkg','.shp','labels.shp'),
+    ('labels.v2','.geojson','labels.v2.geojson'),('labels.SHP','.shp','labels.SHP'),
+])
+def test_selected_format_controls_extension(tmp_path,name,suffix,expected):
+    from geoforma.export_settings import export_path
+    assert export_path(tmp_path/name,suffix)==str(tmp_path/expected)
+
+

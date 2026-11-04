@@ -133,8 +133,8 @@ def clean_known_data(root, *, caches=False, models=False, recovery=False):
             for suffix in ('', '.part', '.part.json'):
                 _remove_file(root, 'runtime/native-v1/downloads/' + name + suffix, removed)
     if recovery:
-        _remove_file(root, 'recovery/untitled.geoforma.json', removed)
-        _remove_file(root, 'recovery/untitled.geoforma.json.autosave', removed)
+        from .project_files import RECOVERY_NAME
+        _remove_file(root, 'recovery/' + RECOVERY_NAME, removed)
     return removed
 
 

@@ -1,6 +1,5 @@
 """Summarize independent workers without sharing their progress or cancellation."""
 from PySide6.QtCore import QObject,QTimer,Qt
-from ..theme import set_tone
 
 
 class BackgroundActivity(QObject):

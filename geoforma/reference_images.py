@@ -10,6 +10,7 @@ from rasterio.enums import Resampling
 from affine import Affine
 from .domain import digest
 from .nodata import declared_missing_value
+from .reference_catalog import reference_key,reference_stem
 
 MAIN_IMAGE_LABEL='主影像'
 REFERENCE_NAME_LIMIT=8
@@ -47,8 +48,8 @@ def reference_tooltip(reference):
 
 def matching_references(project,image):
     if not image or not image.get('path') or not project.get('references'):return []
-    stem=Path(image['path']).stem.casefold()
-    return [ref for ref in project.get('references',[]) if Path(ref['path']).stem.casefold()==stem]
+    stem=reference_stem(image['path'])
+    return [ref for ref in project.get('references',[]) if reference_stem(ref['path'])==stem]
 
 
 def validate_references(project):
@@ -67,7 +68,7 @@ def validate_references(project):
         if not ref.get('display_recipe'):raise ValueError('参考影像显示配置无效。')
         origin=ref.get('reference_origin')
         if origin is not None and (not isinstance(origin,dict) or origin.get('kind') not in ('list','vrt','folder') or not isinstance(origin.get('name'),str) or not origin['name']):raise ValueError('参考影像来源名称无效。')
-        key=(ref['group'].casefold(),Path(ref['path']).stem.casefold())
+        key=reference_key(ref)
         if key in seen:raise ValueError('同一类型存在重复参考影像。')
         seen.add(key)
 
@@ -124,12 +125,17 @@ def read_display(image,window,recipe=None,max_size=None):
         elif source.width==image['width'] and source.height==image['height'] and list(source.transform)[:6]==image['transform']:
             ds=stack.enter_context(WarpedVRT(source,src_nodata=missing_value,nodata=missing_value,transform=source.transform,width=source.width,height=source.height,resampling=Resampling.bilinear)) if missing_value is not None else source
         else:raise ValueError('参考影像缺少投影，且像元网格与主影像不同，无法对齐。')
-        arrays={}
+        arrays={};rendered={}
         for channel,(band,(lo,hi)) in enumerate(zip(recipe['bands'],recipe['ranges'])):
+            key=(band,lo,hi)
+            if key in rendered:
+                output[:,:,channel]=output[:,:,rendered[key]]
+                continue
             if band not in arrays:arrays[band]=ds.read(band,window=Window(x,y,w,h),out_shape=out_shape,masked=True,resampling=Resampling.bilinear)
             array=arrays[band];values=array.filled(float('nan')).astype('float32') if array.dtype.kind=='f' else array.astype('float32').filled(float('nan'))
             good=~np.ma.getmaskarray(array)&np.isfinite(values);valid&=good
             output[:,:,channel]=np.nan_to_num(np.clip((values-lo)*255/max(hi-lo,1e-12),0,255)).astype('uint8')
+            rendered[key]=channel
         if alpha:valid&=ds.read(ds.count,window=Window(x,y,w,h),out_shape=out_shape,resampling=Resampling.nearest)>0
         else:valid&=ds.dataset_mask(window=Window(x,y,w,h),out_shape=out_shape,resampling=Resampling.nearest)>0
     return output,valid

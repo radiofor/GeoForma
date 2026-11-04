@@ -5,7 +5,7 @@ from .export_settings import DEFAULT_LABEL_FIELD
 from osgeo import ogr,osr
 from rasterio.crs import CRS
 from rasterio.warp import transform_geom
-from shapely.geometry import shape,mapping
+from shapely.geometry import mapping
 from shapely.affinity import affine_transform
 from .atomic_io import replace_file
 
@@ -53,15 +53,12 @@ def _publish_set(stage,target):
 
 
 def write_vector(image,labels,path,target_crs,task,classes,protect,label_field=DEFAULT_LABEL_FIELD):
-    from .label_conflicts import assert_no_overlaps
-    assert_no_overlaps(labels,task)
+    from .export_validation import validate_export_labels
+    values,geometries=validate_export_labels(image,labels,classes,task)
     path=Path(path);suffix=path.suffix.lower()
     if suffix not in FORMATS:raise ValueError('矢量格式必须为 .gpkg、.shp 或 .geojson。')
     from .export_settings import validate_label_field
-    from .classes import class_values
-    label_field=validate_label_field(label_field,suffix);values=class_values(classes or [])
-    if classes is not None and any(label.get('class_id') is not None and label['class_id'] not in values for label in labels):
-        raise ValueError('导出标签引用了不存在的类别。')
+    label_field=validate_label_field(label_field,suffix)
     protect(image,path)
     # A Shapefile publishes and replaces a set of siblings, not just .shp.
     # Protect every possible destination before writing or moving any file.
@@ -90,9 +87,7 @@ def write_vector(image,labels,path,target_crs,task,classes,protect,label_field=D
         if suffix=='.gpkg':store.StartTransaction()
         a,b,c,d,e,f=image['transform']
         for i,label in enumerate(labels):
-            task.check();pixel_geometry=shape(label['geometry'])
-            if not pixel_geometry.is_valid or pixel_geometry.is_empty or pixel_geometry.geom_type not in ('Polygon','MultiPolygon'):
-                raise ValueError('导出标签必须是有效的多边形；不会静默平滑或修复。')
+            task.check();pixel_geometry=geometries[i]
             geom=mapping(affine_transform(pixel_geometry,[a,b,d,e,c,f]))
             if reproject:geom=transform_geom(source_crs,crs,geom)
             attrs={'label_id':label['id'],label_field:values.get(label.get('class_id'),label.get('class_id')),'class_name':names.get(label.get('class_id'),''),

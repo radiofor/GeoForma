@@ -46,7 +46,7 @@ def test_invalid_project_is_rejected_without_changing_workspace(workbench,damage
     else:
         old=copy.deepcopy(project['labels'][0]);old['geometry']={'type':'Point','coordinates':[1,2]}
         project['history']={'schema':1,'labels':{'individual':{'undo':[[['target',old,0]]],'redo':[]}}}
-    path=tmp/'bad.geoforma.json';path.write_text(json.dumps(project),encoding='utf-8')
+    path=tmp/'bad.gfm';path.write_text(json.dumps(project),encoding='utf-8')
     with pytest.raises(ValueError):load_project(path)
     original=w.project;sessions=copy.deepcopy(w.image_sessions);errors=[];w.error=errors.append;w.open_project(path)
     assert errors and w.project is original and w.image_sessions==sessions

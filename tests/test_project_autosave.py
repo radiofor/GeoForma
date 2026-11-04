@@ -33,12 +33,33 @@ def automatic_project(tmp_path,monkeypatch):
 
 
 def first_save(w,tmp,monkeypatch):
-    path=tmp/'automatic.geoforma.json'
+    path=tmp/'automatic.gfm'
     monkeypatch.setattr(QFileDialog,'getSaveFileName',lambda *args:(str(path),''))
     assert w.project_actions['save'].isEnabled()
     w.project_actions['save'].trigger()
     assert w.project_path==path and path.is_file() and not w.project_actions['save'].isEnabled()
     return path
+
+
+def test_project_directory_button_tracks_saved_project(automatic_project,monkeypatch):
+    from PySide6.QtGui import QDesktopServices
+    w,app,tmp=automatic_project
+    assert not w.project_directory_button.isEnabled()
+    opened=[]
+    monkeypatch.setattr(QDesktopServices,'openUrl',lambda url:opened.append(url.toLocalFile()) or True)
+    first_save(w,tmp,monkeypatch)
+    assert w.project_directory_button.isEnabled()
+    w.project_directory_button.click()
+    assert Path(opened[0])==tmp.resolve()
+
+
+def test_first_save_removes_only_its_untitled_recovery(automatic_project,monkeypatch,raster_image):
+    w,app,tmp=automatic_project;w.project['images']=[raster_image];w.mark_dirty();w.autosave()
+    until(app,lambda:not w.dirty and w.autosave_task is None)
+    recovery=tmp/'data'/'recovery'/'untitled.gfm';assert recovery.is_file()
+    path=first_save(w,tmp,monkeypatch)
+    assert path.is_file() and not recovery.exists()
+    assert not Path(str(path)+'.bak').exists() and not Path(str(path)+'.autosave').exists()
 
 
 def saved(w,app):
@@ -47,10 +68,10 @@ def saved(w,app):
 
 def block_first_write(monkeypatch):
     started=threading.Event();release=threading.Event();written=[]
-    def write(project,path):
+    def write(project,path,**kwargs):
         if not started.is_set():
             started.set();assert release.wait(5)
-        written.append((project['classes'][0]['name'],Path(path)));save_project(project,path)
+        written.append((project['classes'][0]['name'],Path(path)));save_project(project,path,**kwargs)
     monkeypatch.setattr('geoforma.controllers.projects.save_project',write)
     return started,release,written
 
@@ -62,7 +83,8 @@ def test_first_save_disables_action_and_later_edits_update_formal_file(automatic
     assert not w.project_actions['save'].isEnabled()
     w.project_actions['save'].trigger();saved(w,app)
     assert load_project(path)['classes'][0]['name']=='自动保存的类别'
-    assert load_project(str(path)+'.autosave')['classes'][0]['name']=='自动保存的类别'
+    assert not Path(str(path)+'.autosave').exists()
+    assert not Path(str(path)+'.bak').exists()
     assert w.settings.value('recovery/last_work')==str(path)
 
 
@@ -71,6 +93,35 @@ def test_cancelled_first_save_keeps_action_available(automatic_project,monkeypat
     monkeypatch.setattr(QFileDialog,'getSaveFileName',lambda *args:('',''))
     w.project_actions['save'].trigger()
     assert w.project_path is None and w.project_actions['save'].isEnabled()
+
+
+def test_moved_project_is_not_recreated_by_autosave(automatic_project,monkeypatch):
+    w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch)
+    moved=tmp/'moved.gfm';path.rename(moved)
+    w.project['classes'][0]['name']='等待保存';w.mark_dirty();w.autosave()
+    until(app,lambda:w.autosave_task is None)
+    assert not path.exists() and w.dirty and w.project_saves.failed
+    assert load_project(moved)['classes'][0]['name']=='类别 1'
+    moved.rename(path);w.autosave();saved(w,app)
+    assert load_project(path)['classes'][0]['name']=='等待保存'
+
+
+def test_autosave_overwrites_external_edits_with_current_project(automatic_project,monkeypatch):
+    w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch)
+    external=load_project(path);external['classes'][0]['name']='外部修改'
+    save_project(external,path)
+    w.project['classes'][0]['name']='软件中的内容';w.mark_dirty();w.autosave();saved(w,app)
+    assert load_project(path)['classes'][0]['name']=='软件中的内容'
+    assert not Path(str(path)+'.autosave').exists() and not Path(str(path)+'.bak').exists()
+
+
+def test_old_recovery_sidecar_is_not_opened(automatic_project,monkeypatch):
+    w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch)
+    Path(str(path)+'.autosave').write_bytes(path.read_bytes())
+    w.project['classes'][0]['name']='当前编辑';w.mark_dirty()
+    assert w.request_project_open(path,recover_latest=True)
+    until(app,lambda:w.loading_task is None and w.project_transition is None)
+    assert w.project['classes'][0]['name']=='当前编辑'
 
 
 def test_save_edit_class_delete_and_undo_all_reach_formal_file(automatic_project,monkeypatch,raster_image):
@@ -117,15 +168,15 @@ def test_new_project_keeps_old_pending_snapshot_and_reenables_save(automatic_pro
 
 def test_failure_keeps_dirty_recovery_and_retries_without_save_button(automatic_project,monkeypatch):
     w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch);fail=True
-    def write(project,target):
+    def write(project,target,**kwargs):
         if fail and Path(target)==path:raise OSError('disk unavailable')
-        save_project(project,target)
+        save_project(project,target,**kwargs)
     monkeypatch.setattr('geoforma.controllers.projects.save_project',write)
     w.project['classes'][0]['name']='需要重试的内容';w.mark_dirty();w.autosave()
     until(app,lambda:w.autosave_task is None)
     assert w.dirty and w.project_saves.failed and not w.project_actions['save'].isEnabled()
     assert load_project(path)['classes'][0]['name']=='类别 1'
-    assert load_project(str(path)+'.autosave')['classes'][0]['name']=='需要重试的内容'
+    assert not Path(str(path)+'.autosave').exists()
     fail=False;w.autosave();saved(w,app)
     assert load_project(path)['classes'][0]['name']=='需要重试的内容'
 
@@ -145,7 +196,7 @@ def test_opening_same_project_waits_for_queued_edits(automatic_project,monkeypat
 
 
 def test_queue_order_ignores_wall_clock_and_discards_old_failed_writes(tmp_path):
-    queue=ProjectSaveQueue();path=tmp_path/'project.geoforma.json'
+    queue=ProjectSaveQueue();path=tmp_path/'project.gfm'
     old=ProjectSaveRequest({'_snapshot_time_ns':100},Path(str(path)+'.autosave'),path,0,1,'old',queue.next_order())
     newer=ProjectSaveRequest({'_snapshot_time_ns':50},Path(str(path)+'.autosave'),path,0,2,'new',queue.next_order())
     queue.saved(path,old.order);queue.submit(newer)

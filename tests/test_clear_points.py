@@ -9,6 +9,7 @@ from geoforma.window import MainWindow
 @pytest.fixture
 def workbench():
     app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.autosave=lambda:None
+    w.ensure_model_resources=lambda:True
     w.auto_apply.setChecked(False)
     w.image={'id':'image','width':1000,'height':1000,'ready':True,'model_recipe':None,'display_recipe':None}
     w.project['labels']=[dict(id='saved',image_id='image',annotation_mode='individual',status='confirmed',class_id=1,

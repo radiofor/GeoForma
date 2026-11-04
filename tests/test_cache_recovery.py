@@ -49,28 +49,28 @@ def test_recovery_prefers_recorded_migration_even_if_old_file_remains(tmp_path):
     from geoforma.recovery import recovery_target
     source=tmp_path/'old';destination=tmp_path/'new'
     for root in (source,destination):(root/'recovery').mkdir(parents=True)
-    old=source/'recovery'/'untitled.geoforma.json';old.write_text('old')
-    new=destination/'recovery'/'untitled.geoforma.json';new.write_text('new')
+    old=source/'recovery'/'untitled.gfm';old.write_text('{"images":[{}]}')
+    new=destination/'recovery'/'untitled.gfm';new.write_text('{"images":[{}]}')
     history={'kind':'geoforma-resource-migration-history-v1','migrations':[
-        {'source':str(source),'destination':str(destination),'recoveries':['recovery/untitled.geoforma.json']} ]}
+        {'source':str(source),'destination':str(destination),'recoveries':['recovery/untitled.gfm']} ]}
     (data_dir()/'resource-migration-history.json').write_text(json.dumps(history),encoding='utf-8')
     class Settings:
         def value(self,key,default=''):return str(old) if key=='recovery/last_work' else default
     assert recovery_target(Settings(),destination,data_dir())==new
 
 
-def test_recovery_follows_recorded_autosave_without_redirecting_external_project(tmp_path):
+def test_recovery_does_not_follow_obsolete_autosave(tmp_path):
     import json
     from geoforma.domain import data_dir
     from geoforma.cache_recovery import remap_migrated_path
     source=tmp_path/'old';destination=tmp_path/'new';(destination/'recovery').mkdir(parents=True)
-    (destination/'recovery'/'untitled.geoforma.json.autosave').write_text('saved')
+    (destination/'recovery'/'untitled.gfm.autosave').write_text('saved')
     history={'kind':'geoforma-resource-migration-history-v1','migrations':[
-        {'source':str(source),'destination':str(destination),'recoveries':['recovery/untitled.geoforma.json.autosave']} ]}
+        {'source':str(source),'destination':str(destination),'recoveries':['recovery/untitled.gfm.autosave']} ]}
     (data_dir()/'resource-migration-history.json').write_text(json.dumps(history),encoding='utf-8')
-    old=source/'recovery'/'untitled.geoforma.json'
-    assert remap_migrated_path(old,'recoveries',preserve_existing=False)==destination/'recovery'/'untitled.geoforma.json'
-    assert remap_migrated_path(tmp_path/'external'/'untitled.geoforma.json','recoveries',preserve_existing=False) is None
+    old=source/'recovery'/'untitled.gfm'
+    assert remap_migrated_path(old,'recoveries',preserve_existing=False) is None
+    assert remap_migrated_path(tmp_path/'external'/'untitled.gfm','recoveries',preserve_existing=False) is None
 
 
 def test_relocated_weight_preserves_prepared_feature_after_project_reload(tmp_path,monkeypatch):
@@ -106,7 +106,7 @@ def test_project_loading_remaps_recorded_moved_weight(tmp_path):
     source=tmp_path/'old';destination=tmp_path/'new';(destination/'models').mkdir(parents=True)
     target=destination/'models'/'weight.pt';target.write_bytes(b'model')
     project=new_project();project['model']['checkpoint']=str(source/'models'/'weight.pt')
-    project_path=tmp_path/'project.geoforma.json';save_project(project,project_path)
+    project_path=tmp_path/'project.gfm';save_project(project,project_path)
     history={'kind':'geoforma-resource-migration-history-v1','migrations':[
         {'source':str(source),'destination':str(destination),'models':['models/weight.pt']} ]}
     (data_dir()/'resource-migration-history.json').write_text(json.dumps(history),encoding='utf-8')

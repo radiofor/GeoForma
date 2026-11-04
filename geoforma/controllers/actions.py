@@ -48,7 +48,6 @@ class WorkbenchActions:
         self.undo_prompt_action.setIcon(icon('undo'));self.redo_prompt_action.setIcon(icon('redo'))
         for action in (fit,native,self.undo_prompt_action,self.redo_prompt_action):action.setProperty('feedback','navigation')
         self.undo_label_action=self.action(ui_text('actions.build_actions.006'),self.undo_label,'Ctrl+Alt+Z');self.addAction(self.undo_label_action)
-        self.undo_all_label_action=self.action('全部撤销',self.undo_all_labels);self.addAction(self.undo_all_label_action)
         self.delete_action=self.action(ui_text('action.delete'),self.delete_selection,'Del');self.delete_action.setIcon(icon('delete'));toolbar.addAction(self.delete_action)
         self.delete_action.setProperty('feedback','danger')
         for a in [self.undo_prompt_action,self.redo_prompt_action,self.delete_action]:
@@ -96,15 +95,15 @@ class WorkbenchActions:
         self.addDockWidget(area,dock);return dock
 
     def build_left(self):
-        from ..panels import left
+        from ..ui.panels.imagery import left
         left(self)
 
     def build_right(self):
-        from ..panels import right
+        from ..ui.panels.annotation import right
         right(self)
 
     def build_bottom(self):
-        from ..panels import bottom
+        from ..ui.panels.status import bottom
         bottom(self)
 
     def help(self):

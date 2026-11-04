@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from PySide6.QtWidgets import QApplication
 from geoforma.domain import prompt_window
 from geoforma.window import MainWindow
-from geoforma.services import ModelEngine
+from geoforma.inference.engine import ModelEngine
 
 def test_group_and_box_use_prepared_tile_and_large_target_expands():
     assert prompt_window([[200,200,1],[300,300,0]])==(-128,-128,1024,1024)

@@ -10,6 +10,19 @@ from test_resource_inventory import weights_catalog,config
 from test_workbench import workbench,fake_image
 
 
+def test_workbench_controllers_do_not_shadow_each_others_operations():
+    from collections import defaultdict
+    from types import FunctionType
+    from geoforma.window import MainWindow
+    owners=defaultdict(list)
+    controllers=(MainWindow,*(base for base in MainWindow.__bases__ if base.__module__.startswith('geoforma.controllers')))
+    for controller in controllers:
+        for name,value in vars(controller).items():
+            if not name.startswith('__') and isinstance(value,(FunctionType,property,staticmethod,classmethod)):
+                owners[name].append(controller.__name__)
+    assert not {name:classes for name,classes in owners.items() if len(classes)>1}
+
+
 def test_release_verifier_checks_content_not_just_size_and_excludes_its_manifest(tmp_path):
     program=tmp_path/'GeoForma.exe';program.write_bytes(b'original');records=release_inventory(tmp_path)
     (tmp_path/'release-manifest.json').write_text('manifest is excluded from its own payload hash')
@@ -78,13 +91,14 @@ def test_default_checkpoint_resolution_failure_and_model_dialog_share_status(wei
 
 def test_old_project_autosave_completion_does_not_overwrite_current_status(workbench,monkeypatch,tmp_path):
     w,app,wait,errors=workbench;started=threading.Event();release=threading.Event()
-    def write(project,path):started.set();release.wait(5)
+    w.project_path.write_text('{}')
+    def write(project,path,**kwargs):started.set();release.wait(5)
     monkeypatch.setattr('geoforma.controllers.projects.save_project',write)
     w.project['images']=[fake_image('old')];w.mark_dirty();ProjectWorkflow.autosave(w)
     try:
         deadline=time.monotonic()+3
         while not started.is_set():app.processEvents();time.sleep(.002);assert time.monotonic()<deadline
-        w.project_epoch+=1;w.project_path=tmp_path/'new.geoforma.json';w.mark_dirty()
+        w.project_epoch+=1;w.project_path=tmp_path/'new.gfm';w.mark_dirty()
         w.statusBar().showMessage('新项目编辑中',10000);release.set();wait()
         assert w.statusBar().currentMessage()=='新项目编辑中' and w.dirty and not errors
     finally:release.set();wait()

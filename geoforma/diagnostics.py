@@ -7,6 +7,35 @@ def write_report(path,report):
     from .atomic_io import atomic_json
     atomic_json(path,report,indent=2)
 
+def check_core_exports(directory):
+    """Exercise packaged GIS drivers without requiring an inference runtime."""
+    import tempfile
+    import numpy as np,rasterio
+    from osgeo import ogr
+    from shapely.geometry import box,mapping
+    from .exports import export_raster,export_vector
+    from .raster import inspect_source,make_recipe
+    task=SimpleNamespace(check=lambda:None,signals=SimpleNamespace(progress=SimpleNamespace(emit=lambda *a:None)))
+    assert np.allclose(np.linalg.solve([[2.,1.],[1.,3.]],[5.,10.]),[1.,3.])
+    with tempfile.TemporaryDirectory(prefix='geoforma-export-',dir=directory) as temporary:
+        folder=Path(temporary);source=folder/'source.tif'
+        with rasterio.open(source,'w',driver='GTiff',height=64,width=64,count=3,dtype='uint8',
+                           crs='EPSG:32645',transform=rasterio.transform.from_origin(500000,3000000,10,10)) as ds:
+            ds.write(np.full((3,64,64),90,np.uint8))
+        image=inspect_source(source);image['model_recipe']=make_recipe(image,[1,2,3])
+        labels=[{'id':'self-test','class_id':1,'image_id':image['id'],'status':'confirmed','geometry':mapping(box(10,10,30,30))}]
+        for extension in ('gpkg','shp','geojson'):
+            path=folder/('labels.'+extension)
+            export_vector(image,labels,path,'',task,label_field='class_val')
+            dataset=ogr.Open(str(path));assert dataset is not None
+            layer=dataset.GetLayer(0);assert layer.GetFeatureCount()==1
+            assert layer.GetSpatialRef().GetAuthorityCode(None)==('4326' if extension=='geojson' else '32645')
+            dataset=None
+        path=folder/'labels.tif';export_raster(image,labels,path,task)
+        with rasterio.open(path) as ds:
+            assert ds.crs.to_epsg()==32645 and ds.read(1)[15,15]==1 and ds.read(1)[2,2]==0
+
+
 def self_test(output,raster=None,device='cpu',execution='native',model_id=None,*,core_only=False):
     Path(output).parent.mkdir(parents=True,exist_ok=True)
     report={'ok':False,'version':__import__('geoforma.distribution',fromlist=['VERSION']).VERSION,
@@ -29,6 +58,7 @@ def self_test(output,raster=None,device='cpu',execution='native',model_id=None,*
         transform('EPSG:4326','EPSG:3857',[85],[28]);assert ogr.GetDriverByName('GPKG')
         report['checks']['gis']=True;report['gdal']=gdal.VersionInfo();report['rasterio']=rasterio.__version__
         if core_only:
+            check_core_exports(Path(output).parent);report['checks']['export']=True
             from .window import MainWindow
             from .ui.resources import ResourceDialog
             from .resource_state import snapshot
@@ -65,7 +95,7 @@ def self_test(output,raster=None,device='cpu',execution='native',model_id=None,*
         assert dict(versions.rows)['PyTorch']==report['dependencies']['torch']
         docs.deleteLater();versions.deleteLater();report['checks']['settings_information']=True
         from .domain import new_project,prompt_window
-        from .services import ModelService
+        from .inference.client import ModelService
         from .raster import inspect_source,make_recipe
         from .exports import export_vector,export_raster
         progress=SimpleNamespace(emit=lambda *a:None)

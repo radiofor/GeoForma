@@ -2,7 +2,7 @@ import copy,threading
 from types import SimpleNamespace
 import pytest
 from geoforma.workflow import PreparationQueue,full_bounds,tile_count,preparation_signature,fully_prepared,check_cache_space
-from geoforma.services import ModelEngine
+from geoforma.inference.engine import ModelEngine
 
 
 def image(identifier='one'):
@@ -33,8 +33,7 @@ def test_full_readiness_invalidates_model_recipe_source_and_weight_change(tmp_pa
 
 
 def test_preprocessing_uses_entire_grid_even_if_caller_passes_a_view(tmp_path,monkeypatch):
-    import geoforma.inference.engine as services
-    monkeypatch.setattr(services,'data_dir',lambda:tmp_path)
+    monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path))
     calls=[]
     backend=SimpleNamespace(config={'device':'cpu'},key=lambda im,w:str(tuple(w)),encode=lambda im,w,rgb:(calls.append((w,rgb)) or False))
     engine=ModelEngine();engine.backend=backend;engine.prepare_backend=lambda *a:None
