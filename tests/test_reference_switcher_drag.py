@@ -7,6 +7,7 @@ from test_workbench import workbench,fake_image
 from test_project_autosave import automatic_project,first_save,saved
 from test_reference_images import raster
 from geoforma.storage import load_project
+from geoforma.ui.button_feedback import install_button_feedback
 
 
 def drag_to(button,target,app):
@@ -66,6 +67,25 @@ def test_dropping_outside_reference_row_cancels_reorder(workbench):
     QTest.mouseMove(source,source.mapFromGlobal(outside),20);app.processEvents()
     QTest.mouseRelease(source,Qt.MouseButton.LeftButton,pos=source.mapFromGlobal(outside));app.processEvents()
     assert w.project['references']==records and w.dirty_revision==revision and not errors
+
+
+@pytest.mark.parametrize('cancel',[False,True])
+def test_drag_release_clears_press_feedback_without_changing_selection(workbench,cancel):
+    w,app,wait,errors=workbench;install_button_feedback(app)
+    image=fake_image('main','tile.tif');w.project['images']=[image]
+    records=[dict(image,path=f'{name}/tile.tif',group=name,fingerprint=name) for name in ('A','B','C')]
+    w.project['references']=records;w.refresh_images();w.images.setCurrentRow(0);w.resize(2200,900);w.sync_reference_buttons()
+    QTest.qWait(100);app.processEvents();w.display_reference=records[1];w.visible_reference=records[1];w.sync_reference_buttons()
+    holder=w.reference_switch_holder;source=w.reference_buttons[('a',records[0]['path'])]
+    destination=holder.viewport().mapToGlobal(QPoint(260,80)) if cancel else w.reference_buttons[('c',records[2]['path'])].mapToGlobal(QPoint(47,15))
+    source.setFocus();QTest.mousePress(source,Qt.MouseButton.LeftButton,pos=source.rect().center())
+    assert source._geoforma_feedback.strength==1
+    QTest.mouseMove(source,source.mapFromGlobal(destination),20);app.processEvents()
+    assert holder.drag is not None
+    QTest.mouseRelease(source,Qt.MouseButton.LeftButton,pos=source.mapFromGlobal(destination));app.processEvents()
+    assert not source.isDown() and not source.hasFocus()
+    assert source._geoforma_feedback.strength==0 and not source._geoforma_feedback.hovered
+    assert w.display_reference is records[1] and w.reference_buttons[('b',records[1]['path'])].isChecked() and not errors
 
 
 def test_reference_removal_cancels_active_drag(workbench):

@@ -32,6 +32,11 @@ class ReferenceButton(QToolButton):
             self.setDown(False);event.accept();return
         self.press_global=None;super().mouseReleaseEvent(event)
 
+    def clear_drag_feedback(self):
+        self.setDown(False);self.clearFocus()
+        overlay=getattr(self,'_geoforma_feedback',None)
+        if overlay is not None:overlay.reset()
+
 
 class ReferenceSwitcher(QWidget):
     selected=Signal(object)
@@ -182,6 +187,7 @@ class ReferenceSwitcher(QWidget):
         self.move_drag(point);self._stop_shifts();drag=self.drag;self.drag=None;self.drag_timer.stop()
         placeholder=drag['placeholder'];index=self.row.indexOf(placeholder);self.row.removeWidget(placeholder);placeholder.deleteLater()
         self.row.insertWidget(index,drag['button']);self.row.activate()
+        drag['button'].clear_drag_feedback()
         self.snap_scroll()
         ordered=[self.row.itemAt(i).widget() for i in range(self.row.count())]
         if ordered!=drag['original']:self.reordered.emit([button.reference['group'].casefold() for button in ordered])
@@ -192,7 +198,7 @@ class ReferenceSwitcher(QWidget):
         self.row.removeWidget(placeholder);placeholder.deleteLater()
         for index,button in enumerate(drag['original']):
             self.row.removeWidget(button);self.row.insertWidget(index,button)
-        drag['button'].dragging=False;drag['button'].press_global=None;drag['button'].setDown(False);self.row.activate();self.snap_scroll()
+        drag['button'].dragging=False;drag['button'].press_global=None;drag['button'].clear_drag_feedback();self.row.activate();self.snap_scroll()
 
     def snap_scroll(self):
         bar=self.scroll.horizontalScrollBar();pitch=self.button_width+self.row.spacing()
