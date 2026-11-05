@@ -14,6 +14,9 @@ AppName=GeoForma
 AppVersion={#AppVersion}
 AppPublisher=GeoForma
 DefaultDirName={autopf}\GeoForma
+DisableDirPage=no
+UsePreviousAppDir=no
+AppendDefaultDirName=yes
 DefaultGroupName=GeoForma
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64os
@@ -95,6 +98,33 @@ const
 var
   CleanupMask: Integer;
   UninstallProgress: TOutputMarqueeProgressWizardPage;
+
+function InstallDirectory(Directory: String): String;
+var
+  ParentDirectory: String;
+begin
+  Directory := Trim(Directory);
+  StringChangeEx(Directory, '/', '\', True);
+  if (Length(Directory) = 2) and (Directory[2] = ':') then Directory := Directory + '\';
+  { Leave invalid or relative paths to Setup's own directory validation. }
+  Result := Directory;
+  if (Length(Directory) < 3) or (Directory[2] <> ':') or (Directory[3] <> '\') then Exit;
+  Directory := RemoveBackslashUnlessRoot(Directory);
+  if CompareText(ExtractFileName(Directory), 'GeoForma') = 0 then begin
+    ParentDirectory := ExtractFileDir(Directory);
+    if CompareText(ExtractFileName(ParentDirectory), 'GeoForma') = 0 then
+      Directory := ParentDirectory;
+  end else
+    Directory := AddBackslash(Directory) + 'GeoForma';
+  Result := Directory;
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = wpSelectDir then
+    WizardForm.DirEdit.Text := InstallDirectory(WizardForm.DirEdit.Text);
+end;
 
 function InitializeUninstall(): Boolean;
 var
@@ -224,9 +254,7 @@ begin
     Result := '检测到已安装的 GeoForma。静默安装不会自动卸载旧版，请先处理旧版本。';
     Exit;
   end;
-  { Only the known machine-wide installation in the protected default folder
-    is eligible for automated removal. Never execute user-writable registry
-    commands or install folders with the elevated installer's token. }
+  { Identify the machine-wide installation independently of the new target. }
   if (Count <> 1) or not RegKeyExists(HKLM64, GeoFormaUninstallKey) or
      not RegQueryStringValue(HKLM64, GeoFormaUninstallKey, 'InstallLocation', Location) or
      not RegQueryStringValue(HKLM64, GeoFormaUninstallKey, 'UninstallString', UninstallCommand) or
@@ -235,8 +263,9 @@ begin
     Exit;
   end;
   Location := RemoveBackslashUnlessRoot(Location);
-  Expected := ExpandConstant('{autopf}\GeoForma');
-  if (CompareText(Location, Expected) <> 0) or ((Version <> '1.0.4') and (Version <> '1.0.5')) then begin
+  if (Length(Location) < 4) or (Location[2] <> ':') or (Location[3] <> '\') or
+     (CompareText(ExpandFileName(Location), Location) <> 0) or
+     ((Version <> '1.0.4') and (Version <> '1.0.5')) then begin
     Result := '旧版的位置或版本无法安全验证，请先通过 Windows 已安装的应用卸载旧版，并保留现有数据。';
     Exit;
   end;
@@ -282,7 +311,16 @@ begin
   UninstallProgress.Show;
   try
     UninstallProgress.Animate;
-    if not RunUninstallerWithProgress(Expected, ExitCode) then begin
+    { The original user launches non-default uninstallers rather than passing
+      the elevated installer's token to a program in a user-selected folder. }
+    if CompareText(Location, ExpandConstant('{autopf}\GeoForma')) = 0 then begin
+      if not RunUninstallerWithProgress(Expected, ExitCode) then begin
+        Result := '无法启动旧版卸载程序，安装未继续。请检查旧版状态后重试。';
+        Exit;
+      end;
+    end else if not ShellExecAsOriginalUser('open', Expected,
+      '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_SHOWNORMAL,
+      ewWaitUntilTerminated, ExitCode) then begin
       Result := '无法启动旧版卸载程序，安装未继续。请检查旧版状态后重试。';
       Exit;
     end;
