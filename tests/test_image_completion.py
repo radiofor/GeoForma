@@ -59,6 +59,27 @@ def test_marker_obeys_navigation_lock(workbench,monkeypatch):
     assert not w.image.get('review_complete',False)
 
 
+@pytest.mark.parametrize('key',[Qt.Key.Key_Return,Qt.Key.Key_Enter])
+def test_completion_shortcut_marks_current_image_and_advances(workbench,key):
+    w,app,wait,errors=workbench;images=[fake_image('a'),fake_image('b','b.tif')]
+    w.project['images']=images;w.refresh_images();w.images.setCurrentRow(0)
+    w.activateWindow();w.view.setFocus();app.processEvents()
+    QTest.keyClick(w.view.viewport(),key,Qt.KeyboardModifier.ControlModifier);app.processEvents()
+    assert images[0]['review_complete'] is True and w.image is images[1]
+    QTest.keyClick(w.view.viewport(),key,Qt.KeyboardModifier.ControlModifier);app.processEvents()
+    assert images[1]['review_complete'] is True and w.image is images[1]
+    QTest.keyClick(w.view.viewport(),key,Qt.KeyboardModifier.ControlModifier);app.processEvents()
+    assert images[1]['review_complete'] is True and w.image is images[1] and not errors
+
+
+def test_completion_shortcut_respects_browse_lock(workbench,monkeypatch):
+    w,app,wait,errors=workbench;w.project['images']=[fake_image('a')];w.refresh_images();w.images.setCurrentRow(0)
+    w.activateWindow();w.view.setFocus();app.processEvents()
+    monkeypatch.setattr('geoforma.operation_state.can_browse',lambda _:False)
+    QTest.keyClick(w.view.viewport(),Qt.Key.Key_Return,Qt.KeyboardModifier.ControlModifier);app.processEvents()
+    assert not w.image.get('review_complete',False) and not errors
+
+
 def test_marker_is_autosaved_to_project(automatic_project,monkeypatch,raster_image):
     w,app,tmp=automatic_project;w.project['images']=[raster_image];w.refresh_images();w.images.setCurrentRow(0)
     path=first_save(w,tmp,monkeypatch)

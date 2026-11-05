@@ -115,6 +115,9 @@ def build_imagery(w):
     w.images.setMouseTracking(True)
     reserve_scrollbar(w.images)
     delegate=RasterItemDelegate(w.images);delegate.reviewToggled.connect(w.toggle_image_review);w.images.setItemDelegate(delegate)
+    from PySide6.QtGui import QShortcut,QKeySequence
+    w.complete_image_shortcut=QShortcut(w);w.complete_image_shortcut.setKeys([QKeySequence('Ctrl+Return'),QKeySequence('Ctrl+Enter')])
+    w.complete_image_shortcut.setAutoRepeat(False);w.complete_image_shortcut.activated.connect(w.complete_current_image)
     from ..raster_presenter import RasterListPresenter
     w.raster_presenter=RasterListPresenter(w.images)
     w.images.setMinimumHeight(RasterListSizer.minimum_height)

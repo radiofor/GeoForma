@@ -91,6 +91,9 @@ class ImageWorkflow:
         image['review_complete']=complete;self.mark_dirty();self.refresh_images()
         if complete and index+1<len(self.project['images']):self.images.setCurrentRow(index+1)
 
+    def complete_current_image(self):
+        if self.image and not self.image.get('review_complete',False):self.toggle_image_review(self.image['id'])
+
     def change_image(self,row):
         from ..operation_state import interaction_locked,can_browse
         if interaction_locked(self) or self.reshape_session is not None or not can_browse(self):

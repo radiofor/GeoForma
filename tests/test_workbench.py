@@ -187,6 +187,8 @@ def test_async_autosave_does_not_clear_newer_edits(workbench,monkeypatch):
     def slow_save(project,path,**kwargs):time.sleep(.08);save_project(project,path,**kwargs)
     monkeypatch.setattr('geoforma.controllers.projects.save_project',slow_save)
     w.autosave=MainWindow.autosave.__get__(w);w.mark_dirty();w.autosave();w.project['classes'].append({'id':4,'name':'冰雪'});w.mark_dirty()
+    # Keep the debounce from saving the newer edit before the first write settles.
+    w.autosave_debounce.stop()
     wait();assert w.dirty
     w.autosave();wait();assert not w.dirty
     assert load_project(w.project_path)['classes'][-1]['name']=='冰雪'

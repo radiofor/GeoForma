@@ -84,6 +84,11 @@ class RasterItemDelegate(QStyledItemDelegate):
     def review_rect(rect):
         return QRect(rect.right()-58,rect.center().y()-14,26,28)
 
+    @staticmethod
+    def check_path(x,y):
+        path=QPainterPath();path.moveTo(x-3.5,y);path.lineTo(x-1,y+2.5);path.lineTo(x+3.5,y-3)
+        return path
+
     def paint(self, painter, option, index):
         from .raster_presenter import IDENTIFIER_ROLE,REVIEW_COMPLETE_ROLE
         painter.save()
@@ -108,15 +113,12 @@ class RasterItemDelegate(QStyledItemDelegate):
                          opt.fontMetrics.elidedText(text, Qt.TextElideMode.ElideRight, max(0, text_rect.width())))
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         complete=bool(index.data(REVIEW_COMPLETE_ROLE));button=self.review_rect(opt.rect)
-        cx,cy=button.center().x(),button.center().y()
-        diamond=QPainterPath();diamond.moveTo(cx,cy-8);diamond.lineTo(cx+8,cy);diamond.lineTo(cx,cy+8);diamond.lineTo(cx-8,cy);diamond.closeSubpath()
-        painter.setPen(QPen(QColor('#3267ac' if complete else '#b97920'),1.2))
-        painter.setBrush(QColor('#3267ac' if complete else '#fff3df'));painter.drawPath(diamond)
-        painter.setPen(QPen(QColor('white' if complete else '#b97920'),1.6,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
-        mark=QPainterPath()
-        if complete:mark.moveTo(cx-3,cy);mark.lineTo(cx-1,cy+2);mark.lineTo(cx+3.5,cy-2.5)
-        else:mark.moveTo(cx-3,cy);mark.lineTo(cx+3,cy)
-        painter.drawPath(mark)
+        cx,cy=button.center().x(),opt.rect.center().y()
+        painter.setPen(QPen(QColor('#4f85c4' if complete else '#b97920'),1.0))
+        painter.setBrush(QColor('#4f85c4' if complete else '#fff3df'));painter.drawRoundedRect(QRectF(cx-6.5,cy-6.5,13,13),3,3)
+        painter.setPen(QPen(QColor('white' if complete else '#b97920'),1.7 if complete else 1.5,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+        if complete:painter.drawPath(self.check_path(cx,cy))
+        else:painter.drawLine(cx-3,cy,cx+3,cy)
         x,y=opt.rect.right()-17,opt.rect.center().y()
         painter.setPen(Qt.PenStyle.NoPen if ready else QPen(QColor('#b5c9cf'),1.2))
         painter.setBrush(QColor('#087f83') if ready else Qt.BrushStyle.NoBrush)
@@ -124,9 +126,5 @@ class RasterItemDelegate(QStyledItemDelegate):
         if ready:
             painter.setPen(QPen(QColor('white'), 1.7, Qt.PenStyle.SolidLine,
                                 Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-            path = QPainterPath()
-            path.moveTo(x - 3.5, y)
-            path.lineTo(x - 1, y + 2.5)
-            path.lineTo(x + 3.5, y - 3)
-            painter.drawPath(path)
+            painter.drawPath(self.check_path(x,y))
         painter.restore()
