@@ -6,7 +6,7 @@ progress.ProgressModel：不可变 ProgressState；负责生命周期、阶段�
 ui/progress_bar.TaskProgressBar：唯一 QProgressBar 实现；浅色工作台、深色启动页共用绘制逻辑。
 ui/task_progress.TaskProgressPresentation：把进度模型映射为工作台任务名称、计数、阶段与操作位。
 task_status：任务种类名称和各阶段计数单位，不根据任意文件名猜测任务类型。
-ui/loading_button：导入按钮订阅同一个进度模型，不另建任务状态。
+导入按钮在任务进行时保持原有文字，任务进度统一显示在状态栏。
 ui/background_activity：显示、标签索引、平滑、自动保存等后台活动的独立汇总。
 
 工作台固定位置
@@ -31,9 +31,8 @@ ui/background_activity：显示、标签索引、平滑、自动保存等后台�
 模型：下载显示百分比，加载显示阶段；影像准备的序号与分块计数不混为下载百分比。
 分割、重塑、波段、导出：保留任务种类和当前影像名称，进度单位按实际任务显示。
 运行环境检测/安装/移除：释放连接也在后台执行；移除期间不可取消。
-退出：独立模型显示保存、等待和释放阶段；不允许取消已开始的安全退出。
-启动与退出的进度条平滑插值显示真实阶段，不提前宣布完成。完成时收尾动画最多80毫秒，达到满格并绘制完成勾号后停留约120毫秒，再进入工作台或结束退出。
-启动工作台在此之前保持隐藏，项目打开和资源提醒从工作台显示后开始；退出失败立即返回工作区，不保留延迟关闭回调。
+退出：等待保存和后台任务释放，不显示退出动画；退出失败立即返回工作区。
+启动进度显示真实阶段；项目打开和资源提醒从工作台显示后开始。
 
 并发与取消
 主计算任务串行，项目加载期间不启动另一项主任务。
@@ -47,5 +46,5 @@ ui/background_activity：显示、标签索引、平滑、自动保存等后台�
 
 验证入口
 tests/test_progress_model.py、test_status_completion.py、test_task_identity.py。
-tests/test_project_loading.py、test_import_animation.py、test_runtime_dialog.py。
+tests/test_project_loading.py、test_import_button_status.py、test_runtime_dialog.py。
 tests/test_startup.py、test_shutdown_feedback.py、test_background_activity.py。

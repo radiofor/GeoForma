@@ -32,8 +32,6 @@ def bottom(w):
     menu=QMenu(w.background_button);w.background_button.setMenu(menu)
     w.background_activity=BackgroundActivity(w,w.background_button,menu)
     w.progress=TaskProgressBar()
-    w.import_button.bind_progress(w.progress.model,'import')
-    w.import_reference_button.bind_progress(w.progress.model,'reference_import')
     w.progress_count=ElidedLabel('');w.progress_count.setAlignment(Qt.AlignmentFlag.AlignRight|center)
     w.progress_count.setFixedSize(105,26);w.progress_count.setStyleSheet('color:#456976;font-weight:600;padding:0;')
     w.cancel_button=QPushButton(ui_text('control_state.update_controls.011'));w.cancel_button.setFixedSize(64,26)

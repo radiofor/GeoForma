@@ -17,6 +17,7 @@ DefaultDirName={autopf}\GeoForma
 DisableDirPage=no
 UsePreviousAppDir=no
 AppendDefaultDirName=yes
+AllowRootDirectory=yes
 DefaultGroupName=GeoForma
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64os
@@ -98,6 +99,7 @@ const
 var
   CleanupMask: Integer;
   UninstallProgress: TOutputMarqueeProgressWizardPage;
+  PreviousNextClick: TNotifyEvent;
 
 function InstallDirectory(Directory: String): String;
 var
@@ -117,6 +119,32 @@ begin
   end else
     Directory := AddBackslash(Directory) + 'GeoForma';
   Result := Directory;
+end;
+
+procedure NormalizeDirectoryBeforeNext(Sender: TObject);
+begin
+  if WizardForm.CurPageID = wpSelectDir then
+    WizardForm.DirEdit.Text := InstallDirectory(WizardForm.DirEdit.Text);
+  PreviousNextClick(Sender);
+end;
+
+procedure InitializeWizard;
+var
+  I: Integer;
+  Argument, Directory: String;
+begin
+  PreviousNextClick := WizardForm.NextButton.OnClick;
+  WizardForm.NextButton.OnClick := @NormalizeDirectoryBeforeNext;
+  { Inno resolves /DIR=F: against that drive's current directory before the
+    wizard appears. Preserve the user's intended root for that form. }
+  for I := 1 to ParamCount do begin
+    Argument := ParamStr(I);
+    if CompareText(Copy(Argument, 1, 5), '/DIR=') = 0 then begin
+      Directory := Copy(Argument, 6, Length(Argument));
+      if (Length(Directory) = 2) and (Directory[2] = ':') then
+        WizardForm.DirEdit.Text := InstallDirectory(Directory);
+    end;
+  end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;

@@ -8,7 +8,6 @@ from ...theme import BrandHeader, PanelGroupBox as QGroupBox
 from ..controls import action_button, scroll_panel, ElidedLabel,DeviceStatusLabel,TrailingIconButton,CenteredIconActionButton
 from ..raster_list import RasterItemDelegate, RasterListSizer
 from ..readouts import RasterInfo
-from ..loading_button import LoadingButton
 from ..layouts import card_layout,polish_controls,reserve_scrollbar
 
 
@@ -103,12 +102,12 @@ def build_imagery(w):
     imagery = QGroupBox(ui_text('imagery.left.007'))
     layout = card_layout(imagery)
     layout.setSpacing(6)
-    w.import_button = LoadingButton(ui_text('action.import_image'))
+    w.import_button = QPushButton(ui_text('action.import_image'))
     w.import_button.setProperty('role', 'import')
     w.import_button.clicked.connect(w.import_dialog)
     layout.addWidget(w.import_button)
     references=QHBoxLayout();references.setSpacing(6)
-    w.import_reference_button=LoadingButton('导入参考');w.import_reference_button.setProperty('role','import');w.import_reference_button.clicked.connect(w.import_references_dialog)
+    w.import_reference_button=QPushButton('导入参考');w.import_reference_button.setProperty('role','import');w.import_reference_button.clicked.connect(w.import_references_dialog)
     w.reference_manage_button=action_button(w.reference_manage_action)
     references.addWidget(w.import_reference_button,1);references.addWidget(w.reference_manage_button,1);layout.addLayout(references)
     w.images = QListWidget()
