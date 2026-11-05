@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt,QSignalBlocker
 from PySide6.QtWidgets import QListWidgetItem
 
 IDENTIFIER_ROLE=Qt.ItemDataRole.UserRole+1
+REVIEW_COMPLETE_ROLE=Qt.ItemDataRole.UserRole+2
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,7 @@ class RasterRow:
     title:str
     ready:bool
     detail:str
+    review_complete:bool=False
 
 
 class RasterListPresenter:
@@ -39,6 +41,9 @@ class RasterListPresenter:
                     view.takeItem(view.row(item));view.insertItem(index,item)
                 if item.text()!=row.title:item.setText(row.title)
                 if item.data(Qt.ItemDataRole.UserRole)!=row.ready:item.setData(Qt.ItemDataRole.UserRole,row.ready)
+                if item.data(REVIEW_COMPLETE_ROLE)!=row.review_complete:item.setData(REVIEW_COMPLETE_ROLE,row.review_complete)
+                description='已完成' if row.review_complete else '未完成'
+                if item.data(Qt.ItemDataRole.AccessibleDescriptionRole)!=description:item.setData(Qt.ItemDataRole.AccessibleDescriptionRole,description)
                 if item.toolTip()!=row.detail:item.setToolTip(row.detail)
             chosen=self.items.get(current)
             if view.currentItem() is not chosen:view.setCurrentItem(chosen)

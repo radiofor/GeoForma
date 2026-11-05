@@ -8,6 +8,10 @@ from ..ui.text import ui_text
 
 
 class ReshapeWorkflow:
+    def reshape_error(self,session,message,*,log=True):
+        session['error']=message
+        if log:self.log_message(message)
+
     def model_prompts_locked(self,include_reshape=True):
         if include_reshape and self.reshape_session is not None:return True
         if self.reshape_session is not None and manual_label(self.reshape_session['label']):return True
@@ -36,9 +40,9 @@ class ReshapeWorkflow:
         elif label is None:
             self.view.reshape_picking=True;self.view.reshape_enabled=True
             self.set_tool('reshape');self.update_controls();self.view.setFocus()
-            self.statusBar().showMessage(ui_text('reshape.pick_target'),4000);return
+            return
         elif self.draft_modified():
-            self.statusBar().showMessage(ui_text('reshape.finish_draft'),4000);return
+            self.log_message(ui_text('reshape.finish_draft'));return
         if not draft_target:
             self.clear_draft()
         self.selected_id=None;self.selected_ids.clear()
@@ -62,7 +66,7 @@ class ReshapeWorkflow:
         if not session or self.foreground_task_active() or not self.raw_view_action.isChecked():return
         # Only endpoint snapping to this label; no imagery/shoreline inference.
         stroke=session['stroke']
-        if len(stroke)>=8192:self.statusBar().showMessage(ui_text('reshape.too_many_points'),3000);return
+        if len(stroke)>=8192:self.reshape_error(session,ui_text('reshape.too_many_points'));return
         if not stroke and session.get('target')!='auto':
             geometry=shape(session['label']['geometry']);point=Point(x,y);closest=nearest_points(geometry.boundary,point)[0]
             if closest.distance(point)*abs(self.view.transform().m11())<=7:x,y=closest.x,closest.y
@@ -113,10 +117,9 @@ class ReshapeWorkflow:
             result_task[0]=self.task
             session['preview']=result
         def failed(message):
-            self.log_message(message)
             if self.reshape_session is session:
                 from ..error_messages import user_message
-                session['preview']=None;session['error']=user_message(message);self.redraw()
+                session['preview']=None;self.reshape_error(session,user_message(message),log=False);self.redraw()
         def completed():
             if self.closing or result_task[0] and result_task[0].cancel_event.is_set():return
             if self.reshape_session is session and session.get('preview'):self.commit_reshape()
@@ -134,9 +137,9 @@ class ReshapeWorkflow:
             targets.append(('draft',{**copy.deepcopy(self.draft),'id':base or '__draft','image_id':self.image['id'],'status':'confirmed'}))
         targets.sort(key=lambda item:item[0]!='draft')
         if not targets:
-            session['error']='重塑线未穿过标注边界，请调整编辑线。';self.update_controls();return
+            self.reshape_error(session,'重塑线未穿过标注边界，请调整编辑线。');self.update_controls();return
         if self.draft.get('reshape_batch'):
-            session['error']=ui_text('reshape.finish_draft');self.update_controls();return
+            self.reshape_error(session,ui_text('reshape.finish_draft'));self.update_controls();return
         image=image_snapshot(self.image);stroke=copy.deepcopy(session['stroke']);alternate=session['alternate']
         single=self.mode_index==0 and self.single_polygon.isChecked();context=self.annotation_context()
         originals=copy.deepcopy(self.current_labels());result_holder=[];result_task=[None]
@@ -156,7 +159,7 @@ class ReshapeWorkflow:
             self.log_message(message)
             if self.reshape_session is session:
                 from ..error_messages import user_message
-                session['error']=user_message(message);self.update_controls()
+                self.reshape_error(session,user_message(message),log=False);self.update_controls()
         def completed():
             if self.closing or result_task[0] and result_task[0].cancel_event.is_set():return
             if self.reshape_session is not session or not result_holder:return
@@ -199,13 +202,13 @@ class ReshapeWorkflow:
                 history.append((current['id'],copy.deepcopy(current),index))
                 history.extend((part['id'],None,index+i) for i,part in enumerate(parts[1:],1))
         except Exception as error:
-            session['preview']=None;session['error']=str(error);self.update_controls();return
+            session['preview']=None;self.reshape_error(session,str(error));self.update_controls();return
+        self.retain_reshape_smoothing(replacements,updated_draft)
         self.record_label_operation(history)
         if replacements:
             self.project['labels']=[part for item in self.project['labels'] for part in replacements.get(item['id'],[item])]
         if updated_draft is not None:self.draft=updated_draft
         self.leave_reshape();self.refresh_labels();self.mark_dirty();self.autosave()
-        self.statusBar().showMessage('轮廓已更新。' if updated_draft is None else '已更新轮廓；未保存的标注仍需确认。',4000)
 
     def cancel_reshape(self):
         if self.reshape_session is None and not self.view.reshape_picking:return
@@ -222,7 +225,7 @@ class ReshapeWorkflow:
         originals=self.current_labels();updates=[];history=[]
         from ..session_validation import validate_draft
         try:validate_draft(self.draft,self.image['id'],{i['id'] for i in self.project['images']}|{self.image['id']},{l['id']:l for l in self.project['labels']},{c['id'] for c in self.project['classes']})
-        except ValueError as error:self.statusBar().showMessage(str(error),5000);return
+        except ValueError as error:self.log_message(str(error));return
         try:
             for draft in drafts:
                 identifier=draft.get('base_id') or (draft.get('display_ids') or [None])[0] or uid()
@@ -241,13 +244,12 @@ class ReshapeWorkflow:
                 history.append((identifier,copy.deepcopy(old),index))
                 history.extend((part['id'],None,len(self.project['labels'])+len(updates)+i) for i,part in enumerate(parts) if i)
                 updates.extend(parts)
-        except Exception as error:self.error(str(error));return
+        except Exception as error:self.log_message(str(error));return
         ids={l['id'] for l in updates}
         self.flush_label_history()
         self.project['labels']=[l for l in self.project['labels'] if l['id'] not in ids]+updates
         self.label_undo.append(history);self.label_redo=[];self.clear_draft()
         self.refresh_labels();self.mark_dirty();self.autosave()
-        self.statusBar().showMessage(f'{len(updates)} 个标注已保存。',3000)
 
     def leave_reshape(self):
         if self.task and self.task_kind=='reshape':self.task.cancel()
@@ -259,8 +261,6 @@ class ReshapeWorkflow:
         self.mode_settings.setCurrentWidget(self.reshape_group if active else self.prompt_group);controls.enable(self.editor_group,not active)
         if self.draft.get('reshape_batch'):controls.enable(self.classes,False)
         if active:
-            result=session.get('preview')
-            self.reshape_info.setText(ui_text('reshape.changed').format(result['added_pixels'],result['removed_pixels']) if result else session.get('error') or ui_text('reshape.draw_hint'))
             controls.enable(self.reshape_preview_button,not busy and len(session['stroke'])>=2);controls.enable(self.reshape_other_button,not busy and len(session['stroke'])>=2)
             self.reshape_other_button.setChecked(bool(session['alternate']));controls.enable(self.reshape_cancel_button,not busy)
             self.view.reshape_enabled=not busy and self.raw_view_action.isChecked()

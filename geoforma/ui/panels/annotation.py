@@ -4,7 +4,7 @@ from ...window_preferences import RIGHT_SIDEBAR_WIDTHS
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QAbstractItemView, QCheckBox, QLineEdit, QStackedWidget,QDoubleSpinBox
 from ...theme import PanelGroupBox as QGroupBox
-from ..controls import scroll_panel,ElidedLabel
+from ..controls import scroll_panel
 from ..readouts import PromptCounters
 from ..centered_combo import CenteredComboBox
 from ..layouts import card_layout,polish_controls,reserve_scrollbar
@@ -94,8 +94,6 @@ def build_editor(w,layout):
 
 def build_reshape(w,layout):
     w.reshape_group=QGroupBox(ui_text('reshape.title'));body=card_layout(w.reshape_group)
-    w.reshape_info=ElidedLabel(ui_text('reshape.draw_hint'));w.reshape_info.setFixedHeight(26);w.reshape_info.setProperty('role','muted');body.addWidget(w.reshape_info)
-    w.reshape_info.setToolTip(ui_text('reshape.drawing_keys'))
     add_smoothing_slot(w,w.reshape_group,body)
     row=QHBoxLayout();w.reshape_preview_button=QPushButton(ui_text('reshape.preview'));w.reshape_preview_button.clicked.connect(w.finish_reshape);row.addWidget(w.reshape_preview_button)
     w.reshape_preview_button.setObjectName('primary')

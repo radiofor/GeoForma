@@ -35,6 +35,7 @@ class ImageWorkflow:
                 task.check()
                 try:
                     image=inspect_source(path)
+                    image['review_complete']=False
                     if metadata:
                         image['import_list']=metadata
                         if metadata.get('name'):image['name']=metadata['name']
@@ -78,8 +79,17 @@ class ImageWorkflow:
             metadata=image.get('import_list',{});details=[image['path'],text]
             if metadata.get('group'):details.append('分组：'+metadata['group'])
             if metadata.get('note'):details.append('备注：'+metadata['note'])
-            rows.append(RasterRow(image['id'],name,bool(image.get('ready')),'\n'.join(details)))
+            rows.append(RasterRow(image['id'],name,bool(image.get('ready')),'\n'.join(details),image.get('review_complete',False)))
         self.raster_presenter.sync(rows,current,animate=self.task_kind=='import')
+
+    def toggle_image_review(self,identifier):
+        from ..operation_state import interaction_locked,can_browse
+        if interaction_locked(self) or self.reshape_session is not None or not can_browse(self):return
+        index=next((i for i,image in enumerate(self.project['images']) if image['id']==identifier),None)
+        if index is None:return
+        image=self.project['images'][index];complete=not image.get('review_complete',False)
+        image['review_complete']=complete;self.mark_dirty();self.refresh_images()
+        if complete and index+1<len(self.project['images']):self.images.setCurrentRow(index+1)
 
     def change_image(self,row):
         from ..operation_state import interaction_locked,can_browse

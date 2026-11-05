@@ -3,6 +3,29 @@ from ..smoothing import settings,smooth_batch
 
 
 class SmoothingWorkflow:
+    def retain_reshape_smoothing(self,replacements,updated_draft):
+        """Keep the displayed smooth outlines until the new outlines are ready."""
+        config=settings(self.project,self.annotation_mode())
+        if not config['enabled'] or not self.image:
+            self._reshape_smoothing_hold=None;return
+        expected={part['id']:part['geometry'] for parts in replacements.values() for part in parts}
+        if updated_draft is not None:expected['__draft']=updated_draft['geometry']
+        if not expected:return
+        last=self.smoother.last;old={}
+        if last and last[0][:3]==self.smoothing_key([])[:3]:old={record['id']:record for record in last[2]}
+        retained={}
+        for identifier in expected:
+            item=self.view.overlay_records.get(identifier);record=old.get(identifier)
+            if item is not None and record and item.geometry_value is record['geometry']:
+                retained[identifier]=record
+            elif item is not None and getattr(item,'geometry_value',None) is not None:
+                path=item.path();bounds=path.boundingRect();geometry=item.geometry_value
+                retained[identifier]={'geometry':geometry,'_bounds':[bounds.left(),bounds.top(),bounds.right(),bounds.bottom()],
+                                      '_render_path':path,'_source_geometry':geometry,'_source_path':path}
+            else:retained[identifier]=None
+        draft_id=(updated_draft.get('base_id') or next(iter(updated_draft.get('display_ids',[])),None)) if updated_draft is not None else None
+        self._reshape_smoothing_hold=(self.annotation_context(),config['value'],expected,retained,draft_id)
+
     def smoothing_changed(self):
         if self.restoring_project:return
         self.project.setdefault('smoothing',{})[self.annotation_mode()]={'enabled':self.smooth_enabled.isChecked(),'value':self.smooth_value.value()}
@@ -38,12 +61,29 @@ class SmoothingWorkflow:
     def smooth_display(self,labels,draft):
         config=settings(self.project,self.annotation_mode())
         if not config['enabled'] or not self.image:
-            self.smoother.stop();return labels,draft
+            self._reshape_smoothing_hold=None;self.smoother.stop();return labels,draft
         sources=self.smoothing_sources(labels,draft)
         if not sources:return labels,draft
         key=self.smoothing_key(sources)
+        hold=getattr(self,'_reshape_smoothing_hold',None)
+        if hold:
+            live={label['id']:label['geometry'] for label in self.current_labels()}
+            if self.draft.get('geometry'):live['__draft']=self.draft['geometry']
+            if hold[0]!=self.annotation_context() or hold[1]!=config['value']:
+                self._reshape_smoothing_hold=None;hold=None
+            else:
+                expected=dict(hold[2]);retained=dict(hold[3]);draft_id=hold[4]
+                if '__draft' in expected and '__draft' not in live and draft_id in live:
+                    expected[draft_id]=live[draft_id];retained[draft_id]=retained['__draft']
+                expected={identifier:live[identifier] for identifier in expected if identifier in live}
+                retained={identifier:retained[identifier] for identifier in expected}
+                hold=(hold[0],hold[1],expected,retained,draft_id) if expected else None
+                self._reshape_smoothing_hold=hold
         image={k:self.image[k] for k in ('width','height','path','model_recipe') if k in self.image}
         result=self.smoother.request(key,sources,lambda task:smooth_batch(sources,config['value'],image,task))
+        source_geometry={label['id']:label['geometry'] for label in sources}
+        if hold and result is not None and all(source_geometry.get(i) is geometry for i,geometry in hold[2].items()):
+            self._reshape_smoothing_hold=None;hold=None
         if result is None and self.smoother.last:
             old_key,old_sources,result=self.smoother.last
             if old_key[0]!=key[0]:result=None
@@ -52,6 +92,12 @@ class SmoothingWorkflow:
                 unchanged={l['id'] for l in old_sources if live.get(l['id']) is l['geometry']}
                 result=[l for l in result if l['id'] in unchanged]
         derived={l['id']:l for l in result or ()}
+        if hold:
+            for identifier,record in hold[3].items():
+                if record is None:derived.pop(identifier,None)
+                else:derived[identifier]=record
+            labels=[label for label in labels if label['id'] not in hold[2] or label['id'] in derived]
+            if '__draft' in hold[2] and '__draft' not in derived:draft=None
         target=derived.get('__draft')
         if target:
             for geometry,path in ((target['geometry'],target['_render_path']),(target['_source_geometry'],target['_source_path'])):
@@ -67,4 +113,6 @@ class SmoothingWorkflow:
         if not self.closing:self.redraw();self.update_controls()
 
     def smoothing_error(self,message):
+        self._reshape_smoothing_hold=None
         self.log_message(message);self.statusBar().showMessage('平滑处理失败，请减小平滑值或关闭平滑。',5000)
+        self.redraw()

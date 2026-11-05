@@ -15,6 +15,7 @@ def validate_metadata(image):
     if not isinstance(provenance,dict) or 'source' in provenance and (not isinstance(provenance['source'],str) or not provenance['source'] or '\x00' in provenance['source']):raise ValueError('影像导入来源无效。')
     if 'source_paths' in provenance and (not isinstance(provenance['source_paths'],list) or not all(isinstance(p,str) and p and '\x00' not in p for p in provenance['source_paths'])):raise ValueError('VRT 来源路径无效。')
     if 'ready' in image and type(image['ready']) is not bool:raise ValueError('影像准备状态无效。')
+    if 'review_complete' in image and type(image['review_complete']) is not bool:raise ValueError('影像完成标记无效。')
     for name in ('model_recipe','display_recipe'):
         recipe=image.get(name)
         if recipe is not None:

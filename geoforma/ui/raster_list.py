@@ -1,5 +1,5 @@
 """Stable raster rows with a reserved right readiness indicator."""
-from PySide6.QtCore import Qt, QRectF, QObject, QEvent, QVariantAnimation, QEasingCurve,QPersistentModelIndex,QSize
+from PySide6.QtCore import Qt, QRect, QRectF, QObject, QEvent, QVariantAnimation, QEasingCurve,QPersistentModelIndex,QSize,Signal
 from PySide6.QtGui import QColor, QPalette, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem, QAbstractItemView, QLayout,QSizePolicy
 
@@ -25,10 +25,13 @@ class RasterListSizer(QObject):
 
 
 class RasterItemDelegate(QStyledItemDelegate):
+    reviewToggled=Signal(str)
+
     def __init__(self,view):
-        super().__init__(view);self.view=view;self.hovered=QPersistentModelIndex()
+        super().__init__(view);self.view=view;self.viewport=view.viewport();self.hovered=QPersistentModelIndex()
+        self.pressed_review=QPersistentModelIndex()
         view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        view.viewport().installEventFilter(self)
+        self.viewport.installEventFilter(self)
         self.revealing={};self.reveal_time=0.;self.reveal_curve=QEasingCurve(QEasingCurve.Type.OutCubic)
         self.reveal_animation=QVariantAnimation(self)
         self.reveal_animation.valueChanged.connect(self._advance_reveal)
@@ -56,6 +59,18 @@ class RasterItemDelegate(QStyledItemDelegate):
         return QSize(0,super().sizeHint(option,index).height())
 
     def eventFilter(self,obj,event):
+        from .raster_presenter import IDENTIFIER_ROLE
+        if obj is not getattr(self,'viewport',None):return False
+        if event.type() in (QEvent.Type.MouseButtonPress,QEvent.Type.MouseButtonDblClick):
+            index=self.view.indexAt(event.position().toPoint())
+            if event.button()==Qt.MouseButton.LeftButton and index.isValid() and self.review_rect(self.view.visualRect(index)).contains(event.position().toPoint()):
+                self.pressed_review=QPersistentModelIndex(index);self.view.viewport().update(self.view.visualRect(index));return True
+        if event.type()==QEvent.Type.MouseButtonRelease and self.pressed_review.isValid():
+            pressed=self.pressed_review;self.pressed_review=QPersistentModelIndex();index=self.view.indexAt(event.position().toPoint())
+            self.view.viewport().update(self.view.visualRect(pressed))
+            if event.button()==Qt.MouseButton.LeftButton and index==pressed and self.review_rect(self.view.visualRect(index)).contains(event.position().toPoint()):
+                self.reviewToggled.emit(index.data(IDENTIFIER_ROLE))
+            return True
         if event.type()==QEvent.Type.Hide:self._finish_reveal()
         if event.type() in (QEvent.Type.MouseMove,QEvent.Type.Leave):
             index=QPersistentModelIndex(self.view.indexAt(event.position().toPoint())) if event.type()==QEvent.Type.MouseMove else QPersistentModelIndex()
@@ -65,8 +80,12 @@ class RasterItemDelegate(QStyledItemDelegate):
                     if item.isValid():self.view.viewport().update(self.view.visualRect(item))
         return False
 
+    @staticmethod
+    def review_rect(rect):
+        return QRect(rect.right()-58,rect.center().y()-14,26,28)
+
     def paint(self, painter, option, index):
-        from .raster_presenter import IDENTIFIER_ROLE
+        from .raster_presenter import IDENTIFIER_ROLE,REVIEW_COMPLETE_ROLE
         painter.save()
         delay=self.revealing.get(index.data(IDENTIFIER_ROLE))
         if delay is not None:
@@ -81,13 +100,23 @@ class RasterItemDelegate(QStyledItemDelegate):
         opt.text = ''
         style = opt.widget.style() if opt.widget else QApplication.style()
         style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, opt.widget)
-        text_rect = opt.rect.adjusted(10, 0, -32, 0)
+        text_rect = opt.rect.adjusted(10, 0, -60, 0)
         role = QPalette.ColorRole.HighlightedText if opt.state & QStyle.StateFlag.State_Selected else QPalette.ColorRole.Text
         painter.setFont(opt.font)
         painter.setPen(opt.palette.color(role))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                          opt.fontMetrics.elidedText(text, Qt.TextElideMode.ElideRight, max(0, text_rect.width())))
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        complete=bool(index.data(REVIEW_COMPLETE_ROLE));button=self.review_rect(opt.rect)
+        cx,cy=button.center().x(),button.center().y()
+        diamond=QPainterPath();diamond.moveTo(cx,cy-8);diamond.lineTo(cx+8,cy);diamond.lineTo(cx,cy+8);diamond.lineTo(cx-8,cy);diamond.closeSubpath()
+        painter.setPen(QPen(QColor('#3267ac' if complete else '#b97920'),1.2))
+        painter.setBrush(QColor('#3267ac' if complete else '#fff3df'));painter.drawPath(diamond)
+        painter.setPen(QPen(QColor('white' if complete else '#b97920'),1.6,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+        mark=QPainterPath()
+        if complete:mark.moveTo(cx-3,cy);mark.lineTo(cx-1,cy+2);mark.lineTo(cx+3.5,cy-2.5)
+        else:mark.moveTo(cx-3,cy);mark.lineTo(cx+3,cy)
+        painter.drawPath(mark)
         x,y=opt.rect.right()-17,opt.rect.center().y()
         painter.setPen(Qt.PenStyle.NoPen if ready else QPen(QColor('#b5c9cf'),1.2))
         painter.setBrush(QColor('#087f83') if ready else Qt.BrushStyle.NoBrush)

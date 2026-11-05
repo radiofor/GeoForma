@@ -114,7 +114,7 @@ def build_imagery(w):
     w.images = QListWidget()
     w.images.setMouseTracking(True)
     reserve_scrollbar(w.images)
-    w.images.setItemDelegate(RasterItemDelegate(w.images))
+    delegate=RasterItemDelegate(w.images);delegate.reviewToggled.connect(w.toggle_image_review);w.images.setItemDelegate(delegate)
     from ..raster_presenter import RasterListPresenter
     w.raster_presenter=RasterListPresenter(w.images)
     w.images.setMinimumHeight(RasterListSizer.minimum_height)

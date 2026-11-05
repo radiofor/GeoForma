@@ -44,7 +44,6 @@ def test_unsaved_draft_reshape_cancel_commit_undo_redo_and_confirm(workbench):
     w.begin_reshape();w.add_reshape_point(22,28);w.cancel_reshape()
     assert w.draft==original and not w.project['labels']
     w.begin_reshape();preview(w,app)
-    assert shape(w.view.overlay_records['__draft'].geometry_value).area==124
     assert not w.project['labels'] and shape(w.draft['geometry']).area==124
     assert w.model_prompts_locked() and len(w.draft['manual_edits'])==1
     calls=[];w.service.predict=lambda *a:calls.append(a)

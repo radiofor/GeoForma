@@ -1,5 +1,5 @@
 """Capture real current Qt widgets with isolated, explicitly synthetic GIS data."""
-import argparse,json,os,sys,time
+import argparse,json,os,shutil,sys,time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 
@@ -35,7 +35,11 @@ def main():
     w.autosave=lambda:None;w.autosave_timer.stop();w.auto_apply.setChecked(False)
     w.project['classes']=[{'id':1,'name':'湖泊'},{'id':2,'name':'其他水体'}];w.project['next_class_id']=3;w.refresh_classes()
     image=inspect_source(source);image['model_recipe']=make_recipe(image,[1,2,3]);image['display_recipe']=image['model_recipe'];image['ready']=False
-    w.project['images']=[image];w.refresh_images();w.images.setCurrentRow(0)
+    images=[image]
+    for number in (2,3):
+        other=data/f'demo_{number}.tif';shutil.copy2(source,other)
+        record=inspect_source(other);record['review_complete']=number==2;images.append(record)
+    w.project['images']=images;w.refresh_images();w.images.setCurrentRow(0)
     w.project_path=data/'demo.gfm';w.refresh_project_title();w.update_controls();w.resize(1440,960);w.show()
     def settle():
         deadline=time.monotonic()+20

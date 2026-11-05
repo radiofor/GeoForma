@@ -108,8 +108,7 @@ class TaskWorkflow:
                 from ..error_messages import user_message
                 self.last_error=user_message(message);self.log_message(message);return
             if kind=='reshape':
-                from ..error_messages import user_message
-                self.last_error=user_message(message);self.statusBar().showMessage(self.last_error,5000);return
+                self.log_message(message);return
             self.error(message)
         progress=lambda current,total,text:self.task_progress(current,total,text) if self.task is task else None
         finished=lambda:self.finished(on_finished) if self.task is task else None

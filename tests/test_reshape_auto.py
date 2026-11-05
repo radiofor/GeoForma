@@ -41,6 +41,24 @@ def test_stroke_ignores_selection_and_saves_with_smoothing(workbench,selected):
     assert not shape(w.view.overlay_records['target'].geometry_value).equals(shape(next(l for l in w.project['labels'] if l['id']=='target')['geometry']))
 
 
+def test_successful_reshape_does_not_show_a_status_prompt(workbench,monkeypatch):
+    w,app,_=workbench;messages=[]
+    monkeypatch.setattr(w.statusBar(),'showMessage',lambda *args:messages.append(args))
+    draw(w,app,OUT)
+    assert w.project['labels'][0]['editing_state']=='manual' and not any(args and args[0] for args in messages)
+
+
+def test_worker_failure_is_recorded_without_a_status_prompt(workbench,monkeypatch):
+    from geoforma import reshape
+    w,app,_=workbench;messages=[];before=copy.deepcopy(w.project['labels'])
+    monkeypatch.setattr(w.statusBar(),'showMessage',lambda *args:messages.append(args))
+    def fail(*args,**kwargs):raise ValueError('模拟重塑失败')
+    monkeypatch.setattr(reshape,'reshape_raster',fail)
+    draw(w,app,OUT)
+    assert w.project['labels']==before and w.reshape_session and w.reshape_session.get('error')
+    assert '模拟重塑失败' in w.log.toPlainText() and not any(args and args[0] for args in messages)
+
+
 def two_labels(w):
     w.project['labels'].append(dict(w.project['labels'][0],id='other',class_id=2,geometry=mapping(box(40,20,50,30))))
     w.project['classes'].append({'id':2,'name':'第二类','value':2,'color':'#00ff00'})
@@ -69,6 +87,15 @@ def test_invalid_target_keeps_the_entire_batch_unchanged(workbench):
     draw(w,app,[[18,25],[45,25]])
     assert w.reshape_session and w.reshape_session.get('error')
     assert w.project['labels']==before and not w.draft and not w.label_undo
+
+
+def test_uncrossed_stroke_records_error_without_a_visible_prompt(workbench):
+    w,app,_=workbench;before=copy.deepcopy(w.project['labels'])
+    before_message=w.statusBar().currentMessage()
+    draw(w,app,[[60,60],[70,70]])
+    assert w.reshape_session and '未穿过' in w.reshape_session['error']
+    assert w.statusBar().currentMessage()==before_message
+    assert not hasattr(w,'reshape_info') and w.project['labels']==before and not w.draft
 
 
 def test_unbound_stroke_survives_reopen(workbench):

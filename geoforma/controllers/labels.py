@@ -21,12 +21,10 @@ class LabelWorkflow:
         labels=batch_labels(labels,self.draft)
         active=not base or any(l['id']==base for l in self.current_labels())
         reshape=self.reshape_session
-        preview=reshape.get('preview') if reshape else None
-        if preview:labels=[dict(label,geometry=preview['geometry']) if label['id']==reshape['label']['id'] else label for label in labels]
         draft_geometry=self.draft.get('geometry') if active and (not reshape or reshape.get('target') in ('draft','auto')) else None
         if reshape and reshape.get('target')=='draft':
             labels=[label for label in labels if label['id']!=base]
-            draft_geometry=preview['geometry'] if preview else reshape['label']['geometry']
+            draft_geometry=reshape['label']['geometry']
         labels,draft_geometry=self.smooth_display(labels,draft_geometry)
         staged=self.draft_labels()
         if staged and draft_geometry:

@@ -39,7 +39,7 @@ class WorkbenchActions:
                 a.setToolTip(a.toolTip()+'\n切换此工具会清除未完成的重塑线，保留已有标签。')
             elif mode=='pan':a.setToolTip(a.toolTip()+'\n平移时保留重塑线，切回重塑可继续绘制。')
             if mode=='reshape':
-                a.setToolTip(ui_text('reshape.title')+'\n'+ui_text('reshape.tooltip'));self.reshape_button=toolbar.widgetForAction(a)
+                self.reshape_button=toolbar.widgetForAction(a)
         self.mode_actions['pan'].setChecked(True);toolbar.addSeparator()
         fit=self.action(ui_text('actions.build_actions.003'),self.view.fit_image,lock=False);fit.setIcon(icon('fit'));toolbar.addAction(fit);self.fit_action=fit
         native=self.action('1:1',self.zoom_native,lock=False);native.setIcon(icon('native'));toolbar.addAction(native);toolbar.addSeparator();self.native_zoom_action=native

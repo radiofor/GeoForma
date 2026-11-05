@@ -91,7 +91,10 @@ def test_each_mode_uses_compact_stable_height(workbench):
     assert w.editor_group.isVisible() and not w.editor_group.isEnabled()
     assert 0<=w.mode_settings.height()-w.reshape_group.layout().minimumSize().height()<=16
     reshaping=rectangles(w)
-    w.reshape_session['error']='重塑操作提示'*100;w.update_controls();settle(app)
+    assert not hasattr(w,'reshape_info')
+    message='重塑操作提示'*100;before_message=w.statusBar().currentMessage()
+    w.reshape_error(w.reshape_session,message);w.update_controls();settle(app)
+    assert w.statusBar().currentMessage()==before_message
     assert rectangles(w)==reshaping
     w.cancel_reshape();settle(app)
     assert w.mode_settings.currentWidget() is w.prompt_group and rectangles(w)==before
