@@ -113,6 +113,8 @@ STYLE = STYLE.replace('asset_spin_up', (resource_root() / 'assets' / 'spin_up.sv
 def install_theme(app=None):
     """Call only on the GUI thread. Fusion removes platform-specific control noise."""
     app = app or QApplication.instance()
+    from .ui.input_selection import install_input_selection
+    install_input_selection(app)
     from .ui.button_feedback import install_button_feedback
     install_button_feedback(app)
     from .ui.tooltips import install_tooltips

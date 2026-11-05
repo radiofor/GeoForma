@@ -68,7 +68,9 @@ def add_smoothing_slot(w,group,layout):
 def build_prompt_tools(w,stack):
     w.prompt_group=QGroupBox(ui_text('layout.prompt_tools'));body=card_layout(w.prompt_group)
     w.prompt_counters=PromptCounters();body.addWidget(w.prompt_counters)
-    w.single_polygon=QCheckBox(ui_text('option.single_polygon'));w.single_polygon.setChecked(w.project.get('workspace',{}).get('single_polygon',False));w.single_polygon.setToolTip(ui_text('option.single_polygon_hint'));w.single_polygon.toggled.connect(w.single_polygon_changed);body.addWidget(w.single_polygon)
+    options=QHBoxLayout();options.setContentsMargins(0,0,0,0)
+    w.single_polygon=QCheckBox(ui_text('option.single_polygon'));w.single_polygon.setChecked(w.project.get('workspace',{}).get('single_polygon',False));w.single_polygon.setToolTip(ui_text('option.single_polygon_hint'));w.single_polygon.toggled.connect(w.single_polygon_changed);options.addWidget(w.single_polygon)
+    w.fill_holes=QCheckBox('填充洞');w.fill_holes.setChecked(w.project.get('workspace',{}).get('fill_holes',False));w.fill_holes.toggled.connect(w.fill_holes_changed);options.addWidget(w.fill_holes);body.addLayout(options)
     add_smoothing_slot(w,w.prompt_group,body)
     row=QHBoxLayout();row.setSpacing(6)
     w.apply_button=QPushButton(ui_text('action.apply'));w.apply_button.setObjectName('primary');w.apply_button.setToolTip(ui_text('annotation.build_editor.013'));w.apply_button.clicked.connect(w.predict);row.addWidget(w.apply_button,1)
@@ -95,8 +97,7 @@ def build_editor(w,layout):
 def build_reshape(w,layout):
     w.reshape_group=QGroupBox(ui_text('reshape.title'));body=card_layout(w.reshape_group)
     add_smoothing_slot(w,w.reshape_group,body)
-    row=QHBoxLayout();w.reshape_preview_button=QPushButton(ui_text('reshape.preview'));w.reshape_preview_button.clicked.connect(w.finish_reshape);row.addWidget(w.reshape_preview_button)
-    w.reshape_preview_button.setObjectName('primary')
+    row=QHBoxLayout()
     w.reshape_other_button=QPushButton(ui_text('reshape.other'));w.reshape_other_button.setCheckable(True);w.reshape_other_button.clicked.connect(w.reshape_alternate);row.addWidget(w.reshape_other_button);body.addLayout(row)
     row=QHBoxLayout()
     w.reshape_cancel_button=QPushButton(ui_text('control_state.update_controls.012'));w.reshape_cancel_button.clicked.connect(w.cancel_reshape);row.addWidget(w.reshape_cancel_button);body.addLayout(row)

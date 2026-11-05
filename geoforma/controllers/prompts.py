@@ -11,6 +11,11 @@ from ..editing_state import draft_snapshot,geometry_history
 
 
 class PromptWorkflow:
+    def fill_holes_changed(self,enabled):
+        if getattr(self,'restoring_project',False):return
+        self.invalidate_preview();self.mark_dirty()
+        self.update_controls()
+
     def single_polygon_changed(self,enabled):
         if getattr(self,'restoring_project',False):return
         if self.model_prompts_locked():return
@@ -34,7 +39,7 @@ class PromptWorkflow:
         if leaving:self.leave_reshape()
         if mode!='reshape':self.view.reshape_picking=False
         self.activate_tool(mode)
-        if mode=='draw_polygon':self.statusBar().showMessage('左键添加顶点，右键或双击完成；Backspace 撤回，Esc 取消。',6000)
+        if mode=='draw_polygon':self.statusBar().showMessage('左键添加顶点，右键完成；Backspace 撤回，Esc 取消。',6000)
         if leaving:self.refresh_labels();self.mark_dirty()
         self.update_controls()
 
@@ -167,7 +172,7 @@ class PromptWorkflow:
             seed=None if self.draft.get('ignore_seed') else self.draft.get('seed_geometry')
             # Recompute from the current prompt set, not stale logits influenced by removed points.
             request={'window':window,'points':copy.deepcopy(points),'box':box or (selection_box if not points else None),'logits':None,
-                     'seed':seed,'single_polygon':self.single_polygon.isChecked(),'editing_state':self.draft.get('editing_state','model')}
+                     'seed':seed,'single_polygon':self.single_polygon.isChecked(),'fill_holes':self.fill_holes.isChecked(),'editing_state':self.draft.get('editing_state','model')}
             # A stale prediction cannot be confirmed while new prompts are pending.
             self.draft['pending']=True;self.redraw();image=image_snapshot(self.image);config=copy.deepcopy(self.project['model'])
             revision=self.prompt_revision;context=self.annotation_context()
@@ -202,7 +207,7 @@ class PromptWorkflow:
 
     def update_draft_info(self):
         self.prompt_counters.set_points(self.draft.get('points') or [])
-        if self.draft.get('manual_vertices'):text='绘制中 · 右键或双击完成'
+        if self.draft.get('manual_vertices'):text='绘制中 · 右键完成'
         elif self.model_prompts_locked():
             text=ui_text('reshape.draft_changed') if self.draft.get('manual_edits') else ui_text('reshape.locked')
         elif self.draft.get('pending'):text=ui_text('layout.pending')

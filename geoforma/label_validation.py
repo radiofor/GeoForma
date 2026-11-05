@@ -14,6 +14,11 @@ def validate_label(label,image_ids,class_ids=None):
     if not isinstance(label,dict) or not isinstance(label.get('id'),str) or not label['id']:raise ValueError('标签 ID 无效。')
     if label.get('image_id') not in image_ids:raise ValueError('标签引用了不存在的影像。')
     if label.get('status')!='confirmed':raise ValueError('标签状态无效。')
+    model=label.get('model',{})
+    if not isinstance(model,dict):raise ValueError('标签模型记录无效。')
+    if 'single_polygon' in model and type(model['single_polygon']) is not bool:raise ValueError('标签单一多边形设置无效。')
+    from .session_validation import validate_prompts
+    validate_prompts(label)
     if label.get('score') is not None:
         from .contracts import finite_number
         if not finite_number(label['score']):raise ValueError('标签模型分数必须为有限数值。')

@@ -118,24 +118,35 @@ def read_display(image,window,recipe=None,max_size=None):
         validate_recipe(recipe,reference['bands'])
         crs=image.get('assigned_crs') or image.get('crs')
         alpha=False
-        if source.crs and crs:
+        same_grid=(source.width==image['width'] and source.height==image['height'] and list(source.transform)[:6]==image['transform'])
+        same_crs=bool(source.crs and crs and source.crs==rasterio.crs.CRS.from_user_input(crs))
+        if same_grid and missing_value is None and (same_crs or not source.crs or not crs):
+            ds=source
+        elif source.crs and crs:
             options={'src_nodata':missing_value,'nodata':missing_value} if missing_value is not None else {'add_alpha':True}
             alpha=missing_value is None
             ds=stack.enter_context(WarpedVRT(source,crs=crs,transform=Affine(*image['transform']),width=image['width'],height=image['height'],resampling=Resampling.bilinear,**options))
-        elif source.width==image['width'] and source.height==image['height'] and list(source.transform)[:6]==image['transform']:
+        elif same_grid:
             ds=stack.enter_context(WarpedVRT(source,src_nodata=missing_value,nodata=missing_value,transform=source.transform,width=source.width,height=source.height,resampling=Resampling.bilinear)) if missing_value is not None else source
         else:raise ValueError('参考影像缺少投影，且像元网格与主影像不同，无法对齐。')
+        from rasterio.enums import MaskFlags
+        flags=ds.mask_flag_enums
+        all_valid=not alpha and missing_value is None and all(MaskFlags.all_valid in flags[band-1] for band in set(recipe['bands']))
         arrays={};rendered={}
         for channel,(band,(lo,hi)) in enumerate(zip(recipe['bands'],recipe['ranges'])):
             key=(band,lo,hi)
             if key in rendered:
                 output[:,:,channel]=output[:,:,rendered[key]]
                 continue
-            if band not in arrays:arrays[band]=ds.read(band,window=Window(x,y,w,h),out_shape=out_shape,masked=True,resampling=Resampling.bilinear)
-            array=arrays[band];values=array.filled(float('nan')).astype('float32') if array.dtype.kind=='f' else array.astype('float32').filled(float('nan'))
-            good=~np.ma.getmaskarray(array)&np.isfinite(values);valid&=good
+            if band not in arrays:arrays[band]=ds.read(band,window=Window(x,y,w,h),out_shape=out_shape,masked=not all_valid,resampling=Resampling.bilinear)
+            array=arrays[band]
+            if all_valid:
+                values=array.astype('float32');valid &= np.isfinite(values)
+            else:
+                values=array.filled(float('nan')).astype('float32') if array.dtype.kind=='f' else array.astype('float32').filled(float('nan'))
+                valid &= ~np.ma.getmaskarray(array)&np.isfinite(values)
             output[:,:,channel]=np.nan_to_num(np.clip((values-lo)*255/max(hi-lo,1e-12),0,255)).astype('uint8')
             rendered[key]=channel
         if alpha:valid&=ds.read(ds.count,window=Window(x,y,w,h),out_shape=out_shape,resampling=Resampling.nearest)>0
-        else:valid&=ds.dataset_mask(window=Window(x,y,w,h),out_shape=out_shape,resampling=Resampling.nearest)>0
+        elif not all_valid:valid&=ds.dataset_mask(window=Window(x,y,w,h),out_shape=out_shape,resampling=Resampling.nearest)>0
     return output,valid

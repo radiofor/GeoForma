@@ -35,11 +35,11 @@ def project_snapshot(project):
     return snapshot
 
 
-def save_project(project, path):
+def save_project(project, path, *, smoothing_cache=None, cache_epoch=None):
     path=Path(path)
     SourceGuard(project_sources(project)).check(path)
     require_project_path(path);path.parent.mkdir(parents=True,exist_ok=True)
-    payload=copy.deepcopy(project)
+    payload=copy.deepcopy({key:value for key,value in project.items() if key!='labels'})
     from .classes import validate_classes
     from .export_settings import label_field
     validate_classes(payload['classes']);payload['export_label_field']=label_field(payload)
@@ -47,9 +47,11 @@ def save_project(project, path):
         if 'color' in category:category['color']=normalize_color(category['color'])
     captured=payload.pop('_snapshot_time_ns',None);now=time.time_ns()
     captured=captured if type(captured) is int and 0<captured<=now else now
-    if any(config.get('enabled') for config in payload.get('smoothing',{}).values()) or any('source_geometry' in label for label in payload['labels']):
+    if any(config.get('enabled') for config in payload.get('smoothing',{}).values()) or any('source_geometry' in label for label in project['labels']):
         from .smoothing import stored_labels
-        payload['labels']=stored_labels(payload)
+        labels=stored_labels(project,cache=smoothing_cache,cache_epoch=cache_epoch)
+    else:labels=project['labels']
+    payload['labels']=copy.deepcopy(labels)
     relocate_sources(payload,path.parent,relative=True)
     with atomic_target(path) as part:
         with part.open('w',encoding='utf-8') as stream:json.dump(payload,stream,ensure_ascii=False,indent=2,allow_nan=False)

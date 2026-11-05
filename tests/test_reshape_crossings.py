@@ -29,6 +29,33 @@ def test_multi_crossing_preserves_holes_and_other_parts():
     assert shape(result['geometry']).equals(EXPECTED.difference(hole).union(sibling))
 
 
+def test_reshape_interior_ring_preserves_other_holes():
+    geometry=box(20,20,50,50).difference(box(25,25,35,35).union(box(42,25,46,29)))
+    result=reshape_patch(reshape_intent(mapping(geometry),[[27,33],[27,38],[33,38],[33,33]]),{'width':100,'height':100})
+    output=shape(result['geometry'])
+    assert output.is_valid and len(output.interiors)==2
+    assert any(Polygon(ring).equals(box(42,25,46,29)) for ring in output.interiors)
+    assert output.area==geometry.area-18
+
+
+def test_outer_stroke_may_cross_hole_and_open_it_to_exterior():
+    geometry=box(20,20,40,40).difference(box(25,25,35,35))
+    stroke=[[22,18],[22,28],[30,28],[30,42]]
+    result=reshape_patch(reshape_intent(mapping(geometry),stroke),{'width':100,'height':100})
+    output=shape(result['geometry'])
+    assert output.is_valid and not output.equals(geometry)
+    assert output.intersection(box(30,30,40,40)).equals(geometry.intersection(box(30,30,40,40)))
+
+
+def test_one_stroke_can_edit_multiple_hole_boundaries():
+    geometry=box(10,10,70,50).difference(box(20,20,30,40).union(box(45,20,55,40)))
+    result=reshape_patch(reshape_intent(mapping(geometry),[[15,30],[60,30]]),{'width':100,'height':100})
+    output=shape(result['geometry'])
+    assert output.is_valid and not output.equals(geometry)
+    assert not output.intersection(box(20,20,30,40)).equals(geometry.intersection(box(20,20,30,40)))
+    assert not output.intersection(box(45,20,55,40)).equals(geometry.intersection(box(45,20,55,40)))
+
+
 def test_shared_boundary_segment_can_lead_into_an_outside_edit():
     stroke=[[20,22],[20,24],[18,24],[18,28],[20,28]]
     result=reshape_patch(reshape_intent(mapping(ORIGINAL),stroke),{'width':100,'height':100})

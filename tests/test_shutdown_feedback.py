@@ -53,7 +53,7 @@ def test_failed_autosave_dismisses_exit_feedback_and_keeps_work(tmp_path,monkeyp
     import geoforma.controllers.projects as projects
     app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.show();w.project['images']=[{'id':'image','path':'source.tif'}];w.mark_dirty()
     started=threading.Event();release=threading.Event();warnings=[]
-    def save(*args):started.set();release.wait(3);raise OSError('test disk error')
+    def save(*args,**kwargs):started.set();release.wait(3);raise OSError('test disk error')
     monkeypatch.setattr(projects,'save_project',save);monkeypatch.setattr(QMessageBox,'warning',lambda *args:warnings.append(args))
     try:
         w.close();wait(app,started.is_set)

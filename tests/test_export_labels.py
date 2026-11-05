@@ -23,12 +23,12 @@ def test_category_defaults_increment_and_custom_values_do_not_change_references(
     app=QApplication.instance() or QApplication([]);project=new_project();original=copy.deepcopy(project['classes'])
     dialog=ClassesDialog(project['classes'],2,{1},1)
     assert dialog.value_inputs[1].value()==1
-    dialog.name.setText('道路');dialog.add();dialog.name.setText('建筑');dialog.add()
+    dialog.add();dialog.name_inputs[2].setText('道路');assert dialog.commit_names();dialog.add();dialog.name_inputs[3].setText('建筑');assert dialog.commit_names()
     assert [class_value(c) for c in dialog.classes]==[1,2,3]
     dialog.value_inputs[2].setValue(20)
     assert [c['id'] for c in dialog.classes]==[1,2,3]
-    dialog.name.setText('农田');dialog.add();assert dialog.value_inputs[4].value()==21
-    dialog.value_inputs[1].setValue(8);dialog.list.setCurrentRow(0);assert not dialog.delete_button.isEnabled()
+    dialog.add();dialog.name_inputs[4].setText('农田');assert dialog.commit_names();assert dialog.value_inputs[4].value()==21
+    dialog.value_inputs[1].setValue(8);dialog.list.setCurrentCell(0,0);assert not dialog.delete_button.isEnabled()
     assert project['classes']==original
     project['classes'],project['next_class_id'],_=dialog.value();project['export_label_field']='landcover'
     snapshot=project_snapshot(project);project['classes'][0]['value']=9
@@ -42,8 +42,8 @@ def test_duplicate_value_edit_is_rejected_and_cancel_keeps_original():
     app=QApplication.instance() or QApplication([]);original=[dict(id=1,name='湖泊'),dict(id=2,name='道路')]
     dialog=ClassesDialog(original,3,{1},1)
     dialog.value_inputs[1].setValue(2)
-    assert dialog.value_inputs[1].value()==1 and '唯一' in dialog.message.text()
-    dialog.value_inputs[1].setValue(42);dialog.list.setCurrentRow(0)
+    assert dialog.value_inputs[1].value()==1 and '唯一' in dialog.status.currentMessage()
+    dialog.value_inputs[1].setValue(42);dialog.list.setCurrentCell(0,0)
     assert not dialog.delete_button.isEnabled() and dialog.classes[0]['id']==1
     dialog.reject();assert original==[dict(id=1,name='湖泊'),dict(id=2,name='道路')]
     dialog.deleteLater();app.processEvents()
@@ -60,8 +60,8 @@ def test_explicit_value_cannot_duplicate_a_legacy_default():
 
 def test_new_category_still_works_after_user_selects_the_highest_value():
     app=QApplication.instance() or QApplication([]);dialog=ClassesDialog([],1,set())
-    dialog.name.setText('湖泊');dialog.add();assert class_value(dialog.classes[0])==1
-    dialog.value_inputs[1].setValue(65534);dialog.name.setText('道路');dialog.add()
+    dialog.add();dialog.name_inputs[1].setText('湖泊');assert dialog.commit_names();assert class_value(dialog.classes[0])==1
+    dialog.value_inputs[1].setValue(65534);dialog.add();dialog.name_inputs[2].setText('道路');assert dialog.commit_names()
     assert [c['id'] for c in dialog.classes]==[1,2] and class_value(dialog.classes[-1])==1
     dialog.close();dialog.deleteLater();app.processEvents()
 

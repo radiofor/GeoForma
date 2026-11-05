@@ -27,7 +27,7 @@ class RasterRenderQueue(QObject):
     def __init__(self,pool,reader,parent=None,max_bytes=96*1024**2):
         super().__init__(parent);self.pool=pool;self.reader=reader;self.max_bytes=max_bytes
         self.task=None;self.active_request=None;self.pending_overview=None;self.pending_detail=None;self.cache=OrderedDict();self.cache_bytes=0
-        self.generation=0;self.revision=0;self.cache_epoch=0;self.closed=False;self.displayed={};self.reads=0;self.hits=0;self.discarded=0
+        self.generation=0;self.revision=0;self.cache_epoch=0;self.closed=False;self.displayed={};self.wanted={};self.reads=0;self.hits=0;self.discarded=0
 
     def viewport_changed(self):self.revision+=1
 
@@ -38,14 +38,22 @@ class RasterRenderQueue(QObject):
         snapshot=copy.deepcopy({k:v for k,v in image.items() if k in ('id','path','width','height','fingerprint','display_recipe','transform','crs','assigned_crs','_reference')})
         key=digest({'source':snapshot.get('fingerprint',snapshot['path']),'recipe':snapshot['display_recipe'],'window':window,'size':size})
         request=RasterRequest(key,generation,self.revision,tuple(window),size,overview,snapshot)
+        self.wanted[overview]=(generation,key)
         slot='pending_overview' if overview else 'pending_detail'
         if self.displayed.get(overview)==(generation,key):
             setattr(self,slot,None);self.hits+=1;return
+        if key in self.cache:
+            setattr(self,slot,None);self._start(request);return
+        active=self.active_request
+        if self.task is not None and active is not None and (active.key,active.generation,active.revision,active.overview)==(key,generation,request.revision,overview):
+            setattr(self,slot,None);return
         if self.task is not None:setattr(self,slot,request);return
         self._start(request)
 
     def _valid(self,request):
-        return not self.closed and request.generation==self.generation and (request.overview or request.revision==self.revision)
+        return (not self.closed and request.generation==self.generation and
+                self.wanted.get(request.overview)==(request.generation,request.key) and
+                (request.overview or request.revision==self.revision))
 
     def _publish(self,request,value):
         if not self._valid(request):self.discarded+=1;return
@@ -63,6 +71,7 @@ class RasterRenderQueue(QObject):
             if epoch!=self.cache_epoch:self.discarded+=1;return
             size=sum(v.nbytes for v in value)
             if size<=self.max_bytes:
+                for array in value:array.setflags(write=False)
                 if request.key in self.cache:self.cache_bytes-=sum(v.nbytes for v in self.cache.pop(request.key))
                 self.cache[request.key]=value;self.cache_bytes+=size
                 while self.cache_bytes>self.max_bytes:
@@ -88,7 +97,7 @@ class RasterRenderQueue(QObject):
             else:self.discarded+=1
 
     def reset(self,generation,clear_cache=False):
-        self.generation=generation;self.viewport_changed();self.pending_overview=None;self.pending_detail=None;self.displayed.clear()
+        self.generation=generation;self.viewport_changed();self.pending_overview=None;self.pending_detail=None;self.displayed.clear();self.wanted.clear()
         if clear_cache:
             self.cache_epoch+=1;self.cache.clear();self.cache_bytes=0
 
@@ -96,6 +105,7 @@ class RasterRenderQueue(QObject):
         key=digest({'source':image.get('fingerprint',image['path']),'recipe':image['display_recipe'],'window':window,'size':size})
         amount=sum(v.nbytes for v in value)
         if amount>self.max_bytes:return
+        for array in value:array.setflags(write=False)
         if key in self.cache:self.cache_bytes-=sum(v.nbytes for v in self.cache.pop(key))
         self.cache[key]=value;self.cache_bytes+=amount
         while self.cache_bytes>self.max_bytes:

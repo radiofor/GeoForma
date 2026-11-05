@@ -5,7 +5,7 @@ from shapely.geometry import shape,mapping,Polygon,MultiPolygon,box
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
 from .contracts import finite_number
-from .label_conflicts import polygonal
+from .label_conflicts import polygonal_shape
 
 DEFAULT_VALUE=1.0
 MAX_VALUE=5.0
@@ -44,7 +44,11 @@ def _ring(coordinates,value,task):
 def smooth_geometry(geometry,value=DEFAULT_VALUE,task=None):
     """Round stair steps without deleting components or interior rings."""
     validate_settings({'enabled':True,'value':value})
-    original=shape(geometry);parts=list(original.geoms) if original.geom_type=='MultiPolygon' else [original]
+    return mapping(_smooth_shape(shape(geometry),value,task))
+
+
+def _smooth_shape(original,value,task):
+    parts=list(original.geoms) if original.geom_type=='MultiPolygon' else [original]
     result=[]
     for part in parts:
         if task:task.check()
@@ -57,48 +61,71 @@ def smooth_geometry(geometry,value=DEFAULT_VALUE,task=None):
             if len(reduced.interiors)==len(part.interiors):candidate=reduced
         result.append(candidate)
     output=MultiPolygon(result) if original.geom_type=='MultiPolygon' else result[0]
-    return mapping(output) if output.is_valid else geometry
+    return output if output.is_valid else original
 
 
-def smooth_batch(labels,value,image=None,task=None):
+def smooth_batch(labels,value,image=None,task=None,cache=None,cache_epoch=None):
     from .smoothing_validity import ValidSmoothing
-    with ValidSmoothing(image,task) as validity:return _smooth_batch(labels,value,image,task,validity)
+    with ValidSmoothing(image,task) as validity:return _smooth_batch(labels,value,image,task,validity,cache,cache_epoch)
 
 
-def _smooth_batch(labels,value,image,task,validity):
+def _within_bounds(geometry,bounds):
+    if geometry.is_empty:return True
+    left,top,right,bottom=geometry.bounds
+    return bounds[0]<=left and bounds[1]<=top and right<=bounds[2] and bottom<=bounds[3]
+
+
+def _smooth_batch(labels,value,image,task,validity,cache=None,cache_epoch=None):
     """Preserve each original footprint's ownership, then partition new overlaps."""
     records=list(labels)
     if not records:return []
-    raw=[shape(l['geometry']) for l in records];tree=STRtree(raw);outputs=[]
-    extent=box(0,0,image['width'],image['height']) if image else None
+    validate_settings({'enabled':True,'value':value})
+    raw=[];outputs=[]
+    extent_bounds=(0,0,image['width'],image['height']) if image else None
+    extent=box(*extent_bounds) if extent_bounds else None
     order=sorted(range(len(records)),key=lambda i:(records[i].get('status')!='confirmed',i))
-    completed={};tentative=[]
+    completed={};tentative=[];epoch=(cache.snapshot() if cache_epoch is None else cache_epoch) if cache is not None else None
+    # Resolve hits before inserting misses so a batch larger than the cache
+    # cannot evict all reusable entries while scanning from the beginning.
+    cached_shapes=[]
+    if cache is not None:
+        for i,label in enumerate(records):
+            if task and i%128==0:task.check()
+            cached_shapes.append(cache.get(label['geometry'],value,epoch))
     for i,label in enumerate(records):
         if task:task.check()
-        g=shape(smooth_geometry(label['geometry'],value,task))
-        if extent is not None:g=g.intersection(extent)
-        if label.get('box') and label.get('editing_state')!='manual':g=g.intersection(box(*label['box']))
+        source=label['geometry'];cached=cached_shapes[i] if cache is not None else None
+        if cached is None:
+            original=shape(source);g=_smooth_shape(original,value,task)
+            if task:task.check()
+            if cache is not None:cache.put(source,value,original,g,epoch)
+        else:original,g=cached
+        raw.append(original)
+        if extent is not None and not _within_bounds(g,extent_bounds):g=g.intersection(extent)
+        if label.get('box') and label.get('editing_state')!='manual':
+            if not _within_bounds(g,label['box']):g=g.intersection(box(*label['box']))
         g=validity.clip(g,raw[i])
         tentative.append(g)
+    tree=STRtree(raw)
     expanded_tree=STRtree(tentative)
     for i in order:
         if task:task.check()
         g=tentative[i]
         # An adjacent small target always keeps its original territory.
-        neighbors=[raw[int(j)] for j in tree.query(g) if int(j)!=i and not (records[i].get('status')=='confirmed' and records[int(j)].get('status')!='confirmed') and raw[i].intersection(raw[int(j)]).area<=1e-9 and g.intersection(raw[int(j)]).area>0]
-        neighbors.extend(completed[int(j)] for j in expanded_tree.query(g) if int(j) in completed and g.intersection(completed[int(j)]).area>0)
+        neighbors=[raw[int(j)] for j in tree.query(g,predicate='intersects') if int(j)!=i and not (records[i].get('status')=='confirmed' and records[int(j)].get('status')!='confirmed') and raw[i].intersection(raw[int(j)]).area<=1e-9 and g.intersection(raw[int(j)]).area>0]
+        neighbors.extend(completed[int(j)] for j in expanded_tree.query(g,predicate='intersects') if int(j) in completed and g.intersection(completed[int(j)]).area>0)
         if neighbors:g=g.difference(unary_union(neighbors))
-        geometry=polygonal(g)
-        if geometry is None:
+        g=polygonal_shape(g)
+        if g is None:
             raise ValueError('平滑后目标为空，请减小平滑值。')
-        g=shape(geometry)
         if records[i].get('model',{}).get('single_polygon') and g.geom_type=='MultiPolygon':
-            g=max(g.geoms,key=lambda p:p.area);geometry=mapping(g)
+            g=max(g.geoms,key=lambda p:p.area)
+        geometry=mapping(g)
         completed[i]=g;outputs.append((i,dict(records[i],geometry=geometry,_bounds=list(g.bounds))))
     return [label for _,label in sorted(outputs)]
 
 
-def stored_labels(project,task=None):
+def stored_labels(project,task=None,cache=None,cache_epoch=None):
     """Materialize the selected mode options for a project file, preserving sources."""
     images={im['id']:im for im in project['images']};result=[dict(l) for l in project['labels']]
     for label in result:
@@ -111,7 +138,7 @@ def stored_labels(project,task=None):
         config=settings(project,mode);confirmed=[i for i in indices if result[i]['status']=='confirmed']
         from .smoothing_validity import ValidSmoothing
         with ValidSmoothing(images[image_id],task) as validity:
-            derived=_smooth_batch([result[i] for i in confirmed],config['value'],images[image_id],task,validity)
+            derived=_smooth_batch([result[i] for i in confirmed],config['value'],images[image_id],task,validity,cache,cache_epoch)
             for i,label in zip(confirmed,derived):
                 result[i]={**label,'source_geometry':result[i]['geometry'],'smoothing_applied':config['value']};result[i].pop('_bounds',None)
     return result

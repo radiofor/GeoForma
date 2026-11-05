@@ -43,7 +43,8 @@ def test_pan_and_zoom_reuse_items_and_paths_prepared_for_the_entire_layer(viewpo
 
 def test_path_cache_eviction_does_not_rebuild_retained_scene_geometry(viewport):
     view,move,writes=viewport;near=label('near',100,100);view.overlays([near]);first=view.overlay_records['near']
-    for i in range(520):view.cached_path(mapping(box(i,200,i+1,201)))
+    view.path_cache.max_entries=16
+    for i in range(24):view.cached_path(mapping(box(i,200,i+1,201)))
     assert id(near['geometry']) not in view.path_cache
     move(3900,3900);view.overlays([near]);move(0,0);view.overlays([near])
     assert view.overlay_records['near'] is first and writes==[first]
@@ -66,4 +67,13 @@ def test_raw_visibility_and_data_switch_do_not_resurrect_old_items(viewport):
     view.set_overlay_visibility(True);assert first.isVisible() and writes==[first]
     view.overlays([]);assert not view.overlay_records  # Mode/candidate-set change.
     view.overlays([near]);assert view.overlay_records['near'] is not first
-    view.set_image(2000,2000);assert not view.overlay_records and not view.path_cache
+    view.set_image(2000,2000);assert not view.overlay_records and id(near['geometry']) in view.path_cache
+
+
+def test_returning_to_an_image_reuses_its_cached_geometry_path(viewport,monkeypatch):
+    view,move,writes=viewport;near=label('near',100,100);calls=[];original=scene_layers.geometry_path
+    def track(geometry):calls.append(geometry);return original(geometry)
+    monkeypatch.setattr(scene_layers,'geometry_path',track)
+    view.overlays([near]);view.set_image(2000,2000);view.overlays([])
+    view.set_image(5000,5000);view.overlays([near])
+    assert calls==[near['geometry']] and id(near['geometry']) in view.path_cache

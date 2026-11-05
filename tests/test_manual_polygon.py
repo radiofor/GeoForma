@@ -11,8 +11,7 @@ def click_vertex(w,x,y):
     QTest.mouseClick(w.view.viewport(),Qt.MouseButton.LeftButton,pos=w.view.mapFromScene(QPointF(x,y)))
 
 
-@pytest.mark.parametrize('finish',['right','double'])
-def test_draw_save_and_undo_without_model_preparation(workbench,finish):
+def test_draw_save_and_undo_without_model_preparation(workbench):
     w,app,_=workbench;w.show();app.processEvents();w.image['ready']=False;w.update_controls()
     actions=w.image_toolbar.actions()
     assert actions.index(w.mode_actions['draw_polygon'])+1==actions.index(w.mode_actions['reshape'])
@@ -23,9 +22,7 @@ def test_draw_save_and_undo_without_model_preparation(workbench,finish):
     QTest.keyClick(w.view.viewport(),Qt.Key.Key_Backspace)
     assert len(w.draft['manual_vertices'])==2
     click_vertex(w,65,65)
-    if finish=='right':
-        click_vertex(w,40,65);QTest.mouseClick(w.view.viewport(),Qt.MouseButton.RightButton)
-    else:QTest.mouseDClick(w.view.viewport(),Qt.MouseButton.LeftButton,pos=w.view.mapFromScene(QPointF(40,65)))
+    click_vertex(w,40,65);QTest.mouseClick(w.view.viewport(),Qt.MouseButton.RightButton)
     assert w.confirm_button.isEnabled() and w.draft['editing_state']=='manual'
     assert shape(w.draft['geometry']).is_valid and shape(w.draft['geometry']).area>500
     w.view.setFocus();QTest.keyClick(w.view.viewport(),Qt.Key.Key_Return);app.processEvents()
@@ -46,6 +43,15 @@ def test_invalid_polygon_can_be_corrected_or_cancelled(workbench):
     assert '无效' in w.statusBar().currentMessage()
     QTest.keyClick(w.view.viewport(),Qt.Key.Key_Escape)
     assert not w.draft and not w.view.reshape_items
+
+
+def test_double_click_does_not_finish_drawing(workbench):
+    w,app,_=workbench;w.show();app.processEvents();w.set_tool('draw_polygon')
+    for point in ((40,40),(65,40),(65,65)):click_vertex(w,*point)
+    QTest.mouseDClick(w.view.viewport(),Qt.MouseButton.LeftButton,pos=w.view.mapFromScene(QPointF(40,65)))
+    assert len(w.draft['manual_vertices'])==3 and not w.draft.get('geometry')
+    click_vertex(w,40,65);QTest.mouseClick(w.view.viewport(),Qt.MouseButton.RightButton)
+    assert w.draft.get('geometry') and w.confirm_button.isEnabled()
 
 
 def test_preview_is_filled_and_escape_cancels_completed_draft(workbench):

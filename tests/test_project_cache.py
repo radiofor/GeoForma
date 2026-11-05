@@ -162,16 +162,18 @@ def test_linked_feature_cache_cannot_reach_native_writer(tmp_path,monkeypatch):
 
 
 def test_new_project_clears_disk_and_memory_without_touching_source(workbench):
+    from shapely.geometry import box,mapping
     w,app,wait,errors=workbench;root=data_dir()
     w.service.activate_project(root,w.project['cache_id']);w.cache_generation=w.service.cache_generation
     path=feature(root);old_owner=w.project['cache_id']
     image=fake_image('old');w.project['images']=[image];w.image=image
     w.raster_renderer.prime(image,[0,0,1,1],1,(np.zeros((1,1,3),np.uint8),np.ones((1,1),bool)))
+    w.view.cached_path(mapping(box(0,0,1,1)));assert w.view.path_cache
     assert w.raster_renderer.cache
     w.new();wait()
     assert w.project['cache_id']!=old_owner and not w.project['images'] and not path.exists()
     assert not w.raster_renderer.cache and w.raster_renderer.cache_bytes==0
-    assert not w.label_indexes and not errors
+    assert not w.label_indexes and not w.view.path_cache and not w.view.layers.pixmap_cache and not errors
 
 
 def test_open_other_project_cleans_old_cache_before_preparation(workbench,saved_project):

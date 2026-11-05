@@ -2,8 +2,7 @@
 from functools import lru_cache
 from PySide6.QtCore import Qt,QRectF,QSignalBlocker
 from PySide6.QtGui import QColor,QIcon,QPixmap,QPainter,QPen
-from PySide6.QtWidgets import QColorDialog,QToolButton,QWidget,QHBoxLayout,QLineEdit,QLabel,QSpinBox
-from .controls import ElidedLabel
+from PySide6.QtWidgets import QColorDialog,QToolButton,QLineEdit,QLabel,QSpinBox
 from .text import ui_text
 
 
@@ -29,21 +28,6 @@ class ColorSwatch(QToolButton):
         self.color=QColor(color)
         self.setStyleSheet(f'QToolButton{{background:{self.color.name()};border:1px solid #77929c;border-radius:4px;padding:0;}} QToolButton:hover{{border:2px solid #172f3d;}} QToolButton:focus{{border:2px dashed #172f3d;}}')
         self.setToolTip(ui_text('classes.color_hint').format(self.color.name().upper(),self.color.red(),self.color.green(),self.color.blue()))
-
-
-def category_row(category,color,clicked,value_changed,parent=None):
-    row=QWidget(parent);layout=QHBoxLayout(row);layout.setContentsMargins(8,0,8,0);layout.setSpacing(8)
-    title=ElidedLabel(category['name']);title.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-    layout.addWidget(title,1)
-    from ..classes import class_value
-    layout.addWidget(QLabel(ui_text('classes.value')))
-    value=QSpinBox(row);value.setRange(1,65534);value.setValue(class_value(category))
-    value.setFixedSize(max(88,value.fontMetrics().horizontalAdvance('65534')+38),max(30,value.fontMetrics().height()+12))
-    value.setAlignment(Qt.AlignmentFlag.AlignCenter);value.setKeyboardTracking(False)
-    value.setAccessibleName(ui_text('classes.value_accessible').format(category['name']));value.setToolTip(ui_text('classes.value_hint'))
-    value.valueChanged.connect(value_changed);layout.addWidget(value)
-    swatch=ColorSwatch(color,category['name'],row);swatch.clicked.connect(clicked);layout.addWidget(swatch,0,Qt.AlignmentFlag.AlignVCenter)
-    return row,swatch,value
 
 
 def _uppercase_hex(field):

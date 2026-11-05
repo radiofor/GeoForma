@@ -18,10 +18,10 @@ def wait_until(app,predicate):
 def delay_smoothing(monkeypatch):
     from geoforma.controllers import smoothing
     original=smoothing.smooth_batch;started=threading.Event();release=threading.Event()
-    def delayed(labels,value,image,task):
+    def delayed(labels,value,image,task,cache=None):
         started.set()
         while not release.wait(.005):task.check()
-        return original(labels,value,image,task)
+        return original(labels,value,image,task,cache)
     monkeypatch.setattr(smoothing,'smooth_batch',delayed)
     return started,release
 

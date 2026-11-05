@@ -83,6 +83,7 @@ def test_repeated_grayscale_band_is_read_once(monkeypatch):
     calls=[]
     class Source:
         width=8;height=8;count=1;nodata=None
+        mask_flag_enums=((module.MaskFlags.all_valid,),)
         def __enter__(self):return self
         def __exit__(self,*args):pass
         def read(self,band,**kwargs):calls.append(band);return np.full((8,8),90,np.uint8)

@@ -36,26 +36,27 @@ class LabelListWorkflow:
     def label_index_signature(self,labels=None):
         if labels is None:labels=self.current_labels()
         return (self.image['id'] if self.image else None,
-                tuple((l['id'],l['status'],id(l['geometry']),l.get('score'),bool(l.get('edge')),l.get('class_id')) for l in labels),
+                tuple((l['id'],l['status'],id(l['geometry']),l.get('score'),bool(l.get('edge')),l.get('class_id'),
+                       l.get('editing_state','model'),tuple(l.get('box') or ()),l.get('model',{}).get('single_polygon')) for l in labels),
                 self.annotation_mode())
 
     def ensure_label_index(self,labels=None):
         if labels is None:labels=self.current_labels()
         key=self.label_index_signature(labels)
         if self.label_index_key==key:return True
-        context=self.annotation_context();cached=self.label_indexes.get(context)
-        if cached and cached[0]==key:self.label_index_key,self.label_index=cached;return True
+        context=self.annotation_context();cached=self.label_indexes.get(context,key)
+        if cached is not None:self.label_index_key,self.label_index=key,cached;return True
         from ..operation_state import interaction_locked
         if interaction_locked(self):return False
         if len(labels)<=32 and sum(vertex_count(l['geometry']) for l in labels)<=4096:
             self.label_index=LabelIndex(labels);self.label_index_key=key
-            self.label_indexes[context]=(key,self.label_index);return True
+            self.label_indexes.put(context,key,self.label_index);return True
         if self.label_index_task is None and not self.closing:
             snapshot=[dict(label) for label in labels];task=Task(lambda t:LabelIndex(snapshot,task=t));self.label_index_task=task
             self.background_activity.set('labels','准备标签',f'{len(labels)} 个目标',task)
             def ready(index):
                 if context==self.annotation_context() and key==self.label_index_signature():
-                    self.label_index=index;self.label_index_key=key;self.label_indexes[context]=(key,index)
+                    self.label_index=index;self.label_index_key=key;self.label_indexes.put(context,key,index)
             def failed(message):
                 if task.cancel_event.is_set():return
                 self.log_message('准备标签失败：'+message)

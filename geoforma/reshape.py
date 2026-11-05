@@ -16,24 +16,9 @@ def _intersection_points(geometry):
     return [point for part in getattr(geometry,'geoms',()) for point in _intersection_points(part)]
 
 
-def reshape_intent(geometry,stroke,alternate=False):
-    from .project_validation import validate_stroke
-    validate_stroke(stroke)
-    g=shape(geometry);line=LineString(stroke)
-    if g.geom_type not in ('Polygon','MultiPolygon') or g.is_empty or not g.is_valid:raise ValueError('待重塑标签必须为有效多边形。')
-    if not line.is_simple or not line.is_valid or line.length==0:raise ValueError('重塑线无效或自相交，请调整编辑线。')
-    parts=list(g.geoms) if g.geom_type=='MultiPolygon' else [g];targets=[];touched=0
-    for index,part in enumerate(parts):
-        for ring_index,ring in enumerate([part.exterior,*part.interiors]):
-            boundary=LineString(ring.coords);hits=line.intersection(boundary)
-            points=_intersection_points(hits)
-            if points:touched+=1
-            if len(points)>=2:targets.append((index,ring_index,boundary,points))
-    if len(targets)!=1 or touched!=1:raise ValueError('请穿过同一个外边界至少两次；不能同时重塑多个部件或孔洞。')
-    index,ring_index,boundary,hits=targets[0]
-    if ring_index:raise ValueError('当前版本重塑外边界，孔洞保持不变。')
+def _reshape_ring(boundary,hits,line,alternate):
     ordered=sorted(hits,key=line.project);first,last=ordered[0],ordered[-1]
-    if line.project(last)-line.project(first)<=max(1.,line.length)*1e-12:raise ValueError('请穿过同一个外边界至少两次。')
+    if line.project(last)-line.project(first)<=max(1.,line.length)*1e-12:raise ValueError('请穿过同一个边界至少两次。')
     replacement=list(substring(line,line.project(first),line.project(last)).coords)
     # Use identical intersection anchors, rather than independently rounded
     # linear-reference coordinates that can create microscopic self-crossings.
@@ -50,15 +35,28 @@ def reshape_intent(geometry,stroke,alternate=False):
     choices=[(Polygon(arc+list(reversed(replacement))[1:]),LineString(arc).length),
              (Polygon(complement+replacement[1:]),LineString(complement).length)]
     choices=[(polygon,length) for polygon,length in choices if polygon.is_valid and not polygon.is_empty and polygon.area>0]
-    if not choices:raise ValueError('编辑线无法形成有效外边界，请调整编辑线。')
+    if not choices:raise ValueError('编辑线无法形成有效边界，请调整编辑线。')
     choices.sort(key=lambda choice:(choice[1],choice[0].area),reverse=True)
-    outer=choices[min(int(bool(alternate)),len(choices)-1)][0];part=parts[index]
-    holes=[Polygon(ring) for ring in part.interiors]
-    if any(not outer.covers(hole) for hole in holes):raise ValueError('重塑会改变已有孔洞，请调整编辑线。')
-    edited=Polygon(outer.exterior.coords,[ring.coords for ring in part.interiors])
-    others=parts[:index]+parts[index+1:]
-    if any(edited.intersection(other).area>0 for other in others):raise ValueError('重塑会与同一标签的其他部件重叠。')
-    candidate=unary_union([edited,*others]);delta=g.symmetric_difference(candidate)
+    return choices[min(int(bool(alternate)),len(choices)-1)][0]
+
+
+def reshape_intent(geometry,stroke,alternate=False):
+    from .project_validation import validate_stroke
+    validate_stroke(stroke)
+    g=shape(geometry);line=LineString(stroke)
+    if g.geom_type not in ('Polygon','MultiPolygon') or g.is_empty or not g.is_valid:raise ValueError('待重塑标签必须为有效多边形。')
+    if not line.is_simple or not line.is_valid or line.length==0:raise ValueError('重塑线无效或自相交，请调整编辑线。')
+    parts=list(g.geoms) if g.geom_type=='MultiPolygon' else [g];edited=[];touched=False
+    for part in parts:
+        rings=[part.exterior,*part.interiors];outlines=[Polygon(ring) for ring in rings]
+        for index,ring in enumerate(rings):
+            boundary=LineString(ring.coords);points=_intersection_points(line.intersection(boundary))
+            if len(points)>=2:
+                outlines[index]=_reshape_ring(boundary,points,line,alternate);touched=True
+        outer=outlines[0];holes=outlines[1:]
+        edited.append(outer.difference(unary_union(holes)) if holes else outer)
+    if not touched:raise ValueError('请穿过同一个边界至少两次。')
+    candidate=unary_union(edited);delta=g.symmetric_difference(candidate)
     if delta.is_empty:raise ValueError('编辑线没有改变轮廓。')
     x0,y0,x1,y1=delta.bounds
     window=[math.floor(x0)-1,math.floor(y0)-1,math.ceil(x1)-math.floor(x0)+2,math.ceil(y1)-math.floor(y0)+2]
@@ -91,16 +89,19 @@ def reshape_patch(intent,image,valid=None,blockers=(),bounds=None,single=False,p
         occupied=rasterize([(g,1) for g in blockers],out_shape=(h,w),transform=transform,all_touched=True).astype(bool)
         allowed &= ~occupied
     add &= allowed
-    # Existing holes/parts are protected even if pixel-center rounding differs.
+    # Preserve holes untouched by the selected boundary, despite raster rounding.
     parts=list(original.geoms) if original.geom_type=='MultiPolygon' else [original]
+    candidate=shape(intent['candidate']);candidate_parts=list(candidate.geoms) if candidate.geom_type=='MultiPolygon' else [candidate]
+    candidate_holes=[Polygon(ring) for part in candidate_parts if part.geom_type=='Polygon' for ring in part.interiors]
     holes=[Polygon(ring) for part in parts for ring in part.interiors]
-    if holes:add &= ~rasterize([(mapping(g),1) for g in holes],out_shape=(h,w),transform=transform,all_touched=True).astype(bool)
+    protected=[hole for hole in holes if any(hole.equals(after) for after in candidate_holes)]
+    if protected:add &= ~rasterize([(mapping(g),1) for g in protected],out_shape=(h,w),transform=transform,all_touched=True).astype(bool)
     added=_geometry(add,transform,task);removed=_geometry(remove,transform,task)
     result=original.difference(removed).union(added)
     if bounds:result=result.intersection(box(*bounds))
     resulting_parts=list(result.geoms) if result.geom_type=='MultiPolygon' else [result]
     resulting_holes=[Polygon(ring) for part in resulting_parts if part.geom_type=='Polygon' for ring in part.interiors]
-    if any(not any(hole.equals(after) for after in resulting_holes) for hole in holes):raise ValueError('像元修改会改变已有孔洞，请调整编辑线。')
+    if any(not any(hole.equals(after) for after in resulting_holes) for hole in protected):raise ValueError('像元修改会改变未编辑的孔洞，请调整编辑线。')
     geometry=polygonal(result)
     if single:geometry=select_polygon(geometry,() if blockers else points)
     if not geometry:raise ValueError('框内没有可保留的轮廓，未执行重塑。')

@@ -7,17 +7,19 @@ from shapely.strtree import STRtree
 class LabelIndex:
     def __init__(self,labels,task=None):
         saved=[label for label in labels if label['status']=='confirmed']
-        shapes=[]
+        shapes=[];vertices=0
         for label in saved:
             if task:task.check()
+            vertices+=vertex_count(label['geometry'])
             shapes.append(shape(label['geometry']))
+        self.cache_weight=len(saved)*512+vertices*128
         tree=STRtree(shapes);self.confirmed=[];self._geometries=[];unchanged_index=True
         for index,(label,geometry) in enumerate(zip(saved,shapes)):
             if task:task.check()
-            covers=[shapes[int(j)] for j in tree.query(geometry) if int(j)>index]
+            covers=[shapes[int(j)] for j in tree.query(geometry,predicate='intersects') if int(j)>index]
             clipped=geometry.difference(unary_union(covers)) if covers else geometry
             if not clipped.is_empty:
-                unchanged=clipped.equals(geometry)
+                unchanged=not covers or clipped.equals(geometry)
                 item=dict(label,geometry=label['geometry'] if unchanged else mapping(clipped),_bounds=list(clipped.bounds))
                 if not unchanged:
                     unchanged_index=False
@@ -36,7 +38,7 @@ class LabelIndex:
         saved=self.confirmed
         if geometry:
             active=shape(geometry)
-            affected={int(i) for i in self._tree.query(active)}
+            affected={int(i) for i in self._tree.query(active,predicate='intersects')}
             saved=[]
             for index,label in enumerate(self.confirmed):
                 if label['id']==base:continue

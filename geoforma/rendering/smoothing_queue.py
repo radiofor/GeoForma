@@ -3,6 +3,7 @@ from collections import OrderedDict
 from PySide6.QtCore import QObject,Signal,QTimer,QThreadPool
 from ..tasks import Task
 from .scene_layers import geometry_path
+from ..smoothing_cache import SmoothingGeometryCache
 
 
 def prepare_paths(records,value,task=None):
@@ -23,6 +24,7 @@ class SmoothingQueue(QObject):
     def __init__(self,parent=None):
         super().__init__(parent);self.pool=QThreadPool(self);self.pool.setMaxThreadCount(1)
         self.task=None;self.pending=None;self.key=None;self.cache=OrderedDict();self.last=None;self.closed=False
+        self.geometry_cache=SmoothingGeometryCache()
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.setInterval(35);self.timer.timeout.connect(self._start)
 
     def request(self,key,records,fn):
@@ -79,7 +81,7 @@ class SmoothingQueue(QObject):
         self.stop();self.key=key;self.last=(key,records,value)
 
     def clear(self):
-        self.stop();self.cache.clear();self.last=None
+        self.stop();self.cache.clear();self.geometry_cache.clear();self.last=None
 
     def close(self):
         self.closed=True;self.clear()

@@ -1,9 +1,10 @@
 """Incremental graphics layers; no annotation state or model inference."""
-from PySide6.QtCore import Qt, QRectF, QPointF,QVariantAnimation
+from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QImage, QPixmap, QPainterPath, QPainterPathStroker, QPen, QColor, QTransform
 from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsPixmapItem
-from collections import OrderedDict
 from .label_item import LabelItem, LABEL_RED
+from .path_cache import GeometryPathCache
+from .pixmap_cache import RasterPixmapCache
 
 
 def geometry_path(geometry):
@@ -45,34 +46,12 @@ class SceneLayers:
     def __init__(self,view):
         self.view=view;self.reset()
 
-    def reset(self):
-        self.base_item=None;self.detail_item=None;self.preview_item=None;self.overlay_records={};self.overlay_items=[];self.prompt_items=[];self.point_records={};self.box_item=None;self.path_cache=OrderedDict();self.overlay_visible=True
+    def reset(self,keep_paths=False):
+        paths=self.path_cache if keep_paths else GeometryPathCache()
+        pixmaps=self.pixmap_cache if keep_paths else RasterPixmapCache()
+        self.base_item=None;self.detail_item=None;self.preview_item=None;self.overlay_records={};self.overlay_items=[];self.prompt_items=[];self.point_records={};self.box_item=None;self.path_cache=paths;self.pixmap_cache=pixmaps;self.overlay_visible=True
         self.raster_epoch=None
         self.annotation_context=None;self.annotation_sets={}
-        self.raster_fade=None;self.raster_backups=[]
-
-    def stop_raster_transition(self):
-        if self.raster_fade is not None:self.raster_fade.stop();self.raster_fade.deleteLater();self.raster_fade=None
-        if self.base_item is not None:self.base_item.setOpacity(1)
-        for item in self.raster_backups:self.scene().removeItem(item)
-        self.raster_backups=[]
-
-    def begin_raster_transition(self):
-        self.stop_raster_transition()
-        for z,item in enumerate((self.base_item,self.detail_item)):
-            if item is None:continue
-            backup=RasterOverviewItem(item.pixmap()) if isinstance(item,RasterOverviewItem) else QGraphicsPixmapItem(item.pixmap())
-            if isinstance(backup,RasterOverviewItem):backup.excluded=item.excluded
-            backup.setPos(item.pos());backup.setTransform(item.transform());backup.setZValue(z-2)
-            backup.setTransformationMode(item.transformationMode());self.scene().addItem(backup);self.raster_backups.append(backup)
-
-    def finish_raster_transition(self):
-        if not self.raster_backups or self.base_item is None:return
-        self.base_item.setOpacity(0)
-        animation=QVariantAnimation(self.view);self.raster_fade=animation;animation.setDuration(140);animation.setStartValue(0.);animation.setEndValue(1.)
-        animation.valueChanged.connect(lambda value:self.base_item.setOpacity(value))
-        animation.finished.connect(self.stop_raster_transition);animation.start()
-
     def set_annotation_context(self,context):
         if context==self.annotation_context:return
         self.annotation_sets[self.annotation_context]={'overlays':self.overlay_records,'points':self.point_records,'box':self.box_item}
@@ -100,13 +79,16 @@ class SceneLayers:
 
     def show_raster(self,array,valid,window,overview=False):
         import numpy as np
-        rgba=np.dstack([array,valid.astype(np.uint8)*255]);h,w=rgba.shape[:2]
-        image=QImage(rgba.data,w,h,rgba.strides[0],QImage.Format.Format_RGBA8888).copy()
+        h,w=array.shape[:2];pixmap=self.pixmap_cache.get(array,valid)
+        if pixmap is None:
+            rgba=np.dstack([array,valid.astype(np.uint8)*255])
+            image=QImage(rgba.data,w,h,rgba.strides[0],QImage.Format.Format_RGBA8888).copy()
+            pixmap=QPixmap.fromImage(image);self.pixmap_cache.put(array,valid,pixmap)
         current=self.base_item if overview else self.detail_item
-        if current:current.setPixmap(QPixmap.fromImage(image));item=current
+        if current:current.setPixmap(pixmap);item=current
         elif overview:
-            item=RasterOverviewItem(QPixmap.fromImage(image));self.scene().addItem(item)
-        else:item=self.scene().addPixmap(QPixmap.fromImage(image))
+            item=RasterOverviewItem(pixmap);self.scene().addItem(item)
+        else:item=self.scene().addPixmap(pixmap)
         item.setPos(window[0],window[1]);item.setTransform(QTransform.fromScale(window[2]/w,window[3]/h));item.setZValue(0 if overview else 1)
         item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
         if overview:self.base_item=item
@@ -128,10 +110,9 @@ class SceneLayers:
         self.preview_item.update()
 
     def cached_path(self,geometry):
-        key=id(geometry);cached=self.path_cache.get(key)
-        if cached and cached[0] is geometry:self.path_cache.move_to_end(key);return cached[1]
-        path=geometry_path(geometry);self.path_cache[key]=(geometry,path)
-        if len(self.path_cache)>512:self.path_cache.popitem(last=False)
+        cached=self.path_cache.get(geometry)
+        if cached is not None:return cached
+        path=geometry_path(geometry);self.path_cache.put(geometry,path)
         return path
 
     def set_overlay_visibility(self,visible):

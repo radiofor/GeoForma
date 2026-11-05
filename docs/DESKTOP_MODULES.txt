@@ -9,6 +9,12 @@ geoforma/controllers/modes.py：标注草稿与历史管理、模型设置变化
 geoforma/ui/panels/：影像面板、标注面板、状态区；编辑器、列表、导出各有独立构建函数。
 geoforma/ui/controls.py：统一按钮、百分比输入和滚动面板的默认行为。
 geoforma/ui/centered_combo.py：包含箭头预留宽度的下拉框居中绘制。
+geoforma/ui/classes_dialog.py：类别管理表格和暂存编辑；类别校验、颜色选择与项目提交分别复用已有模块。
+geoforma/ui/input_selection.py：统一文本与数字输入框的首次聚焦全选、再次点击定位光标行为。
+geoforma/hole_filling.py：分割和重塑共用的孔洞填充，保留无效像元和其他标注的边界。
+geoforma/label_index_cache.py / rendering/path_cache.py：有容量上限的影像标签索引与轮廓路径缓存，切换影像时复用，切换项目时清理。
+geoforma/smoothing_cache.py：显示、自动保存和导出按轮廓与强度复用独立平滑计算；邻接、重叠和有效像元仍针对当前结果重新检查。
+geoforma/rendering/pixmap_cache.py：只复用不可变影像帧的显示图像，受内存上限约束并在项目切换时清理。
 geoforma/progress.py / ui/progress_bar.py：共享进度状态机与唯一进度条渲染器。
 geoforma/ui/task_progress.py：任务身份、阶段、计数和保留结果的工作台适配器。
 geoforma/operation_state.py / tool_state.py：项目切换边界及工具可用性规则。

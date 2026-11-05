@@ -57,13 +57,10 @@ def test_class_editor_can_show_and_preserve_names_beyond_line_edit_default(workb
     w,app,tmp=workbench;name='长类别名称_中文_English_1234567890_'*1600
     dialog=ClassesDialog([{'id':1,'name':name,'value':65534},{'id':2,'name':'短名称'}],3,set(),1,w)
     dialog.resize(480,400);dialog.show();app.processEvents()
-    assert dialog.name.text()==name and dialog.name.cursorPosition()==0
-    dialog.expand_name_button.click();app.processEvents()
-    assert dialog.name_details.isVisible() and dialog.name_details.toPlainText()==name
-    assert dialog.name_details.isReadOnly()
+    assert dialog.name_inputs[1].text()==name and dialog.name_inputs[1].cursorPosition()==0
     field=dialog.value_inputs[1]
     assert field.width()>=field.fontMetrics().horizontalAdvance('65534')+38
-    updated=name+'末尾修改';dialog.name.setText(updated);dialog.rename()
-    assert dialog.classes[0]['name']==updated and dialog.name_details.toPlainText()==updated
+    updated=name+'末尾修改';dialog.name_inputs[1].setText(updated);assert dialog.commit_names()
+    assert dialog.classes[0]['name']==updated and dialog.name_inputs[1].text()==updated
     dialog.grab().save(str(tmp/'long_category_editor.png'))
     dialog.close();app.processEvents()

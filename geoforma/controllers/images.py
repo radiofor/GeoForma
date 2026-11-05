@@ -2,7 +2,6 @@
 from __future__ import annotations
 from ..ui.text import ui_text
 import copy
-from collections import defaultdict
 from pathlib import Path
 from PySide6.QtCore import Qt, QRectF,QSignalBlocker
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QInputDialog
@@ -52,7 +51,8 @@ class ImageWorkflow:
                 self.project['images'].extend(images);self.refresh_images();self.mark_dirty()
                 row=len(self.project['images'])-len(images)
                 with QSignalBlocker(self.images):self.images.setCurrentRow(row)
-                self._activate_image(row);self.queue_preparation()
+                self._activate_image(row)
+                if not self.auto_prepare:self.queue_preparation()
             summary=plan.summary(len(images));self.log_message(summary);self.statusBar().showMessage(summary,8000)
             for error in plan.errors[:200]:self.log_message(error)
             if plan.errors:self.show_import_report(summary,plan.errors)
@@ -63,23 +63,8 @@ class ImageWorkflow:
         box.setDetailedText('\n'.join(errors[:500])+ (f'\n其余 {len(errors)-500} 项未列出。' if len(errors)>500 else ''));dialog_result(box)
 
     def refresh_images(self):
-        from ..ui.raster_presenter import RasterRow
-        current=self.image['id'] if self.image else None;rows=[]
-        by_name=defaultdict(list)
-        for image in self.project['images']:by_name[image['name']].append(image)
-        for image in self.project['images']:
-            states={'queued':ui_text('control_state.update_controls.013'),'preparing':ui_text('control_state.update_controls.014'),'paused':ui_text('control_state.update_controls.015'),'failed':ui_text('control_state.update_controls.016'),'bands_required':ui_text('control_state.update_controls.017')}
-            text=ui_text('control_state.update_controls.021') if image.get('ready') else states.get(image.get('preparation_state'),ui_text('images.refresh_images.017'))
-            name=image['name']
-            others=[im for im in by_name[name] if im['id']!=image['id']]
-            if others:
-                parents=Path(image['path']).parents
-                for depth,parent in enumerate(parents):
-                    if parent.name and all(len(Path(im['path']).parents)<=depth or Path(im['path']).parents[depth].name!=parent.name for im in others):name+=' · '+parent.name;break
-            metadata=image.get('import_list',{});details=[image['path'],text]
-            if metadata.get('group'):details.append('分组：'+metadata['group'])
-            if metadata.get('note'):details.append('备注：'+metadata['note'])
-            rows.append(RasterRow(image['id'],name,bool(image.get('ready')),'\n'.join(details),image.get('review_complete',False)))
+        from ..ui.raster_presenter import build_raster_rows
+        current=self.image['id'] if self.image else None;rows=build_raster_rows(self.project['images'])
         self.raster_presenter.sync(rows,current,animate=self.task_kind=='import')
 
     def toggle_image_review(self,identifier):
@@ -103,21 +88,20 @@ class ImageWorkflow:
         self._activate_image(row)
 
     def _activate_image(self,row):
-        self.invalidate_preview()
         if row<0 or row>=len(self.project['images']):return
         if self.image is self.project['images'][row]:return
+        self.invalidate_preview()
         self.auto_apply_timer.stop()
         if self.label_index_task:self.label_index_task.cancel()
         self.store_image_session()
         self.last_error=''
-        self.label_indexes.clear()
         self.image=self.project['images'][row];session=self.load_image_session()
         if 'class_id' in self.draft:
             self.classes.blockSignals(True);self.classes.setCurrentIndex(self.classes.findData(self.draft['class_id']));self.classes.blockSignals(False)
         self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation);self.view.set_image(self.image['width'],self.image['height'])
         if session.get('navigation'):self.view.restore_navigation(session['navigation'])
         elif session.get('view'):self.view.fitInView(QRectF(*session['view']),Qt.AspectRatioMode.KeepAspectRatio)
-        self.refresh_info();self.refresh_labels();self.update_draft_info();self.update_controls();self.request_render(True);self.mark_dirty()
+        self.refresh_info();self.update_draft_info();self.refresh_labels();self.request_render(True);self.mark_dirty()
         if self.auto_prepare:self.queue_preparation()
 
     def store_image_session(self):

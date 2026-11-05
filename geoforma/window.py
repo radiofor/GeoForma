@@ -131,6 +131,8 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
         self.state.label_indexes.clear()
         self.label_index=None;self.label_index_key=None
         if hasattr(self,'label_lookup'):self.label_lookup.clear()
+        if hasattr(self,'view'):
+            self.view.path_cache.clear();self.view.layers.pixmap_cache.clear()
     project = property(lambda self: self.state.project, _set_project)
     project_path = property(lambda self: self.state.project_path, lambda self, value: setattr(self.state, 'project_path', value))
     image = property(lambda self: self.state.image, lambda self, value: setattr(self.state, 'image', value))

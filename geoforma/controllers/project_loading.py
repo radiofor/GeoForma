@@ -14,7 +14,7 @@ from ..ui.text import ui_text
 
 @contextmanager
 def blocked_controls(window):
-    names=('images','classes','auto_apply','single_polygon',
+    names=('images','classes','auto_apply','single_polygon','fill_holes',
            'smooth_enabled','smooth_value','raw_view_action','view')
     blockers=[QSignalBlocker(getattr(window,name)) for name in names]
     updates=window.updatesEnabled();window.setUpdatesEnabled(False)
@@ -159,6 +159,7 @@ class ProjectLoadingWorkflow:
                 self.state=WorkbenchState(loaded.project,project_path=Path(path),image=loaded.image,draft=loaded.draft,mode_index=loaded.mode_index,project_epoch=epoch)
                 self.runtime_status=runtime
                 self.label_lookup.clear();self.label_indexes.clear();self.label_index_key=None;self.label_index=None
+                self.view.path_cache.clear();self.view.layers.pixmap_cache.clear()
                 self.render_generation+=1;self.raster_renderer.reset(self.render_generation,clear_cache=True)
                 from ..resource_location import current_resource_dir
                 roots=[data_dir()]
@@ -169,7 +170,7 @@ class ProjectLoadingWorkflow:
                 if Path(path).resolve() in {base.resolve() for base in untitled}:self.project_path=None
                 state=self.project.get('workspace',{})
                 self.tool_modes=dict(state.get('tools',{}))
-                self.auto_apply.setChecked(state.get('auto_apply',True));self.single_polygon.setChecked(state.get('single_polygon',False))
+                self.auto_apply.setChecked(state.get('auto_apply',True));self.single_polygon.setChecked(state.get('single_polygon',False));self.fill_holes.setChecked(state.get('fill_holes',False))
                 raw_view=state.get('raw_view',False);self.raw_view_action.setChecked(True);self.refresh_classes()
                 session={}
                 if self.image:
@@ -182,14 +183,14 @@ class ProjectLoadingWorkflow:
                 self.refresh_export_crs(force=True)
                 self.refresh_export_label_field(force=True)
                 self.view.set_image(self.image['width'],self.image['height']) if self.image else self.view.set_image(0,0)
-                if loaded.draft_path is not None:self.view.path_cache[id(self.draft['geometry'])]=(self.draft['geometry'],loaded.draft_path)
+                if loaded.draft_path is not None:self.view.path_cache.put(self.draft['geometry'],loaded.draft_path)
                 if self.image:
                     if loaded.navigation:self.view.restore_navigation(loaded.navigation)
                     elif loaded.view_window:self.view.fitInView(QRectF(*loaded.view_window),Qt.AspectRatioMode.KeepAspectRatio)
                     self.view.update_scrollbar_visibility()
                 self.view.set_overlay_visibility(True)
                 self.label_index=loaded.index;self.label_index_key=self.label_index_signature()
-                self.label_indexes[self.annotation_context()]=(self.label_index_key,self.label_index)
+                self.label_indexes.put(self.annotation_context(),self.label_index_key,self.label_index)
                 if loaded.frame is not None:
                     full=[0,0,self.image['width'],self.image['height']]
                     if loaded.overview is not None:

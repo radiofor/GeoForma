@@ -104,10 +104,15 @@ class ReshapeWorkflow:
         from ..reshape import reshape_raster
         label=session['label'];context=self.annotation_context();stroke=copy.deepcopy(session['stroke']);alternate=session['alternate']
         blockers=[copy.deepcopy(l['geometry']) for l in self.current_labels() if l['id']!=label['id'] and l['status']=='confirmed']
-        image=image_snapshot(self.image);single=self.mode_index==0 and self.single_polygon.isChecked()
+        image=image_snapshot(self.image);single=self.mode_index==0 and self.single_polygon.isChecked();fill=self.fill_holes.isChecked()
         result_task=[None]
         self.view.reshape_enabled=False;session['preview']=None;session.pop('error',None)
-        def work(task):return reshape_raster(image,label['geometry'],stroke,blockers,None,single,label.get('points') or [],alternate,task)
+        def work(task):
+            result=reshape_raster(image,label['geometry'],stroke,blockers,None,single,label.get('points') or [],alternate,task)
+            if fill:
+                from ..hole_filling import fill_reshape_result
+                result=fill_reshape_result(result,blockers)
+            return result
         def done(result):
             if self.reshape_session is not session or self.annotation_context()!=context:return
             if self.task and self.task.cancel_event.is_set():return
@@ -141,7 +146,7 @@ class ReshapeWorkflow:
         if self.draft.get('reshape_batch'):
             self.reshape_error(session,ui_text('reshape.finish_draft'));self.update_controls();return
         image=image_snapshot(self.image);stroke=copy.deepcopy(session['stroke']);alternate=session['alternate']
-        single=self.mode_index==0 and self.single_polygon.isChecked();context=self.annotation_context()
+        single=self.mode_index==0 and self.single_polygon.isChecked();fill=self.fill_holes.isChecked();context=self.annotation_context()
         originals=copy.deepcopy(self.current_labels());result_holder=[];result_task=[None]
         self.view.reshape_enabled=False;session.pop('error',None)
         def work(task):
@@ -150,7 +155,11 @@ class ReshapeWorkflow:
                 task.check()
                 blockers=[l['geometry'] for l in originals if l['id']!=label['id'] and l['status']=='confirmed']
                 blockers.extend(result['geometry'] for result in outputs)
-                outputs.append(reshape_raster(image,label['geometry'],stroke,blockers,None,single,label.get('points') or [],alternate,task))
+                result=reshape_raster(image,label['geometry'],stroke,blockers,None,single,label.get('points') or [],alternate,task)
+                if fill:
+                    from ..hole_filling import fill_reshape_result
+                    result=fill_reshape_result(result,blockers)
+                outputs.append(result)
             return outputs
         def done(results):
             if self.reshape_session is session and self.annotation_context()==context:
@@ -261,7 +270,7 @@ class ReshapeWorkflow:
         self.mode_settings.setCurrentWidget(self.reshape_group if active else self.prompt_group);controls.enable(self.editor_group,not active)
         if self.draft.get('reshape_batch'):controls.enable(self.classes,False)
         if active:
-            controls.enable(self.reshape_preview_button,not busy and len(session['stroke'])>=2);controls.enable(self.reshape_other_button,not busy and len(session['stroke'])>=2)
+            controls.enable(self.reshape_other_button,not busy and len(session['stroke'])>=2)
             self.reshape_other_button.setChecked(bool(session['alternate']));controls.enable(self.reshape_cancel_button,not busy)
             self.view.reshape_enabled=not busy and self.raw_view_action.isChecked()
             controls.enable(self.images,False);controls.enable(self.labels_table,not busy)
@@ -272,7 +281,7 @@ class ReshapeWorkflow:
             controls.enable(self.undo_prompt_action,not busy and bool(session['stroke']));controls.enable(self.redo_prompt_action,not busy and bool(session.get('redo_stroke')))
         if locked:
             for key in ('positive','negative','box','select_points'):controls.enable(self.mode_actions[key],False)
-            for control in (self.apply_button,self.auto_apply,self.single_polygon,self.clear_points_button,self.delete_points_button):controls.enable(control,False)
+            for control in (self.apply_button,self.auto_apply,self.single_polygon,self.fill_holes,self.clear_points_button,self.delete_points_button):controls.enable(control,False)
         else:
             controls.enable(self.auto_apply,not busy)
         from ..tool_state import available_tools

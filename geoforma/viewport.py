@@ -60,8 +60,7 @@ class ImageView(ViewNavigation,QGraphicsView):
         self.setCursor(Qt.CursorShape.OpenHandCursor if mode=='pan' else Qt.CursorShape.CrossCursor)
 
     def set_image(self,width,height):
-        self.layers.stop_raster_transition()
-        self.scene().clear();self.layers.reset();self.rubber=None
+        self.scene().clear();self.layers.reset(keep_paths=True);self.rubber=None
         self.reshape_points=[];self.reshape_items=[];self.reshape_enabled=False;self.polygon_fill=None
         self.raster_rect=QRectF(0,0,width,height);self.scene().setSceneRect(self.raster_rect);self.setSceneRect(self.raster_rect);self.fit_image()
         self.empty.setVisible(width==0 or height==0)
@@ -175,10 +174,8 @@ class ImageView(ViewNavigation,QGraphicsView):
         super().leaveEvent(event)
 
     def mouseDoubleClickEvent(self,event):
-        if self.mode=='draw_polygon' and event.button()==Qt.MouseButton.LeftButton:
-            point=self.mapToScene(event.position().toPoint())
-            if self.raster_rect.contains(point):self.polygonPoint.emit(point.x(),point.y())
-            self.polygonFinished.emit();event.accept();return
+        if self.mode in ('draw_polygon','reshape') and event.button()==Qt.MouseButton.LeftButton:
+            event.accept();return
         super().mouseDoubleClickEvent(event)
 
     def mouseReleaseEvent(self,event):

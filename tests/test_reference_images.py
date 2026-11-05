@@ -89,6 +89,34 @@ def test_multiple_types_switch_only_basemap_and_restore_partial_matches(workbenc
     assert not reports and not errors
 
 
+def test_reference_frame_replacement_is_atomic_without_fade(workbench,monkeypatch):
+    import numpy as np
+    from geoforma.controllers.display import DisplayWorkflow
+    w,app,wait,errors=workbench;w.show();app.processEvents()
+    w.view.set_image(20,20);w.view.show_raster(np.zeros((4,4,3),np.uint8),np.ones((4,4),bool),[0,0,20,20],True)
+    w.reference_transition_pending=True;w.display_reference={'group':'reference'};w.render_generation+=1
+    original=w.view.show_raster;observed=[]
+    def show(*args):
+        observed.append(w.view.viewport().updatesEnabled());return original(*args)
+    monkeypatch.setattr(w.view,'show_raster',show)
+    DisplayWorkflow.apply_raster(w,(np.full((4,4,3),42,np.uint8),np.ones((4,4),bool)),[0,0,20,20],True)
+    assert observed==[False] and w.view.viewport().updatesEnabled()
+    assert not w.reference_transition_pending and w.visible_reference is w.display_reference
+    assert w.view.base_item.opacity()==1 and not hasattr(w.view.layers,'raster_fade') and not errors
+
+
+def test_overview_schedules_detail_immediately_and_discards_stale_callback(workbench,monkeypatch):
+    import numpy as np
+    from geoforma.controllers.display import DisplayWorkflow
+    w,app,wait,errors=workbench;w.show();app.processEvents();w.view.set_image(20,20)
+    w.render_timer.stop();calls=[];monkeypatch.setattr(w,'request_render',lambda *args:calls.append(args))
+    frame=(np.zeros((4,4,3),np.uint8),np.ones((4,4),bool))
+    DisplayWorkflow.apply_raster(w,frame,[0,0,20,20],True);app.processEvents()
+    assert calls==[()] and not w.render_timer.isActive()
+    calls.clear();DisplayWorkflow.apply_raster(w,frame,[0,0,20,20],True);w.render_generation+=1;app.processEvents()
+    assert not calls and not errors
+
+
 def test_same_group_new_file_replaces_match_and_failed_file_does_not_remove_existing(workbench,tmp_path):
     w,app,wait,errors=workbench;reference=raster(tmp_path/'ndwi'/'tile.tif')
     base=raster(tmp_path/'rgb'/'tile.tif');w.project['images']=[base];w.refresh_images();w.images.setCurrentRow(0)

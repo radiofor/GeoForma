@@ -5,7 +5,7 @@ from stat import S_ISREG
 import numpy as np
 import rasterio
 from rasterio.windows import Window
-from rasterio.enums import Resampling
+from rasterio.enums import Resampling,MaskFlags
 
 from .domain import digest, uid
 
@@ -91,6 +91,7 @@ def read_rgb(image, window, recipe=None, max_size=None):
             if ox1>ox0 and oy1>oy0:
                 read_window=Window(left,top,right-left,bottom-top);size=(oy1-oy0,ox1-ox0)
                 area=np.s_[oy0:oy1,ox0:ox1];valid[area]=True
+                flags=ds.mask_flag_enums if missing_value is None else None
                 for band in dict.fromkeys(recipe['bands']):
                     if missing_value is not None:
                         masked=ds.read(band,window=read_window,out_shape=size,masked=True,resampling=Resampling.bilinear if max_size else Resampling.nearest)
@@ -99,7 +100,8 @@ def read_rgb(image, window, recipe=None, max_size=None):
                     else:
                         data=ds.read(band,window=read_window,out_shape=size,
                             resampling=Resampling.bilinear if max_size else Resampling.nearest)
-                        valid[area] &= (ds.read_masks(band,window=read_window,out_shape=size)>0) & np.isfinite(data)
+                        if MaskFlags.all_valid not in flags[band-1]:valid[area] &= ds.read_masks(band,window=read_window,out_shape=size)>0
+                        if data.dtype.kind in ('f','c'):valid[area] &= np.isfinite(data)
                     rendered={}
                     for channel,selected in enumerate(recipe['bands']):
                         if selected!=band:continue

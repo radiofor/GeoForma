@@ -80,7 +80,7 @@ class SmoothingWorkflow:
                 hold=(hold[0],hold[1],expected,retained,draft_id) if expected else None
                 self._reshape_smoothing_hold=hold
         image={k:self.image[k] for k in ('width','height','path','model_recipe') if k in self.image}
-        result=self.smoother.request(key,sources,lambda task:smooth_batch(sources,config['value'],image,task))
+        result=self.smoother.request(key,sources,lambda task:smooth_batch(sources,config['value'],image,task,self.smoother.geometry_cache))
         source_geometry={label['id']:label['geometry'] for label in sources}
         if hold and result is not None and all(source_geometry.get(i) is geometry for i,geometry in hold[2].items()):
             self._reshape_smoothing_hold=None;hold=None
@@ -101,8 +101,7 @@ class SmoothingWorkflow:
         target=derived.get('__draft')
         if target:
             for geometry,path in ((target['geometry'],target['_render_path']),(target['_source_geometry'],target['_source_path'])):
-                self.view.path_cache[id(geometry)]=(geometry,path)
-                if len(self.view.path_cache)>512:self.view.path_cache.popitem(last=False)
+                self.view.path_cache.put(geometry,path)
         return [dict(l,**{key:derived[l['id']][key] for key in ('geometry','_bounds','_render_path','_source_geometry','_source_path')}) if l['id'] in derived else l for l in labels],derived.get('__draft',{}).get('geometry',draft)
 
     def smoothing_key(self,sources):

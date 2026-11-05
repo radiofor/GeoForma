@@ -1,6 +1,7 @@
 """Explicit application state shared by desktop workflows; no QWidget references."""
 from dataclasses import dataclass,field
 from pathlib import Path
+from .label_index_cache import LabelIndexCache
 
 
 @dataclass
@@ -28,4 +29,4 @@ class WorkbenchState:
     mode_histories:dict=field(default_factory=dict)
     tool_modes:dict=field(default_factory=dict)
     model_warmup_signature:str|None=None
-    label_indexes:dict=field(default_factory=dict)
+    label_indexes:LabelIndexCache=field(default_factory=LabelIndexCache)

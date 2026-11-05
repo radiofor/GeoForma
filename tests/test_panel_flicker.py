@@ -19,7 +19,7 @@ class PanelEvents(QObject):
 
 def test_hover_across_panels_reuses_overlays_without_layout_or_visibility_changes(workbench,hover_move):
     w,app,wait,errors=workbench;w.resize(1440,1000);w.view.setFocus();settle(app)
-    controls=[w.single_polygon,w.smooth_enabled,w.auto_apply,w.apply_button,w.model_button,
+    controls=[w.single_polygon,w.fill_holes,w.smooth_enabled,w.auto_apply,w.apply_button,w.model_button,
               w.import_button,w.main_image_button,w.settings_button]
     overlays=[control._geoforma_feedback for control in controls];before=rectangles(w)
     spy=PanelEvents(w);app.installEventFilter(spy)

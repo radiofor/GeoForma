@@ -49,12 +49,12 @@ def test_color_swatch_click_updates_only_staged_category_and_keeps_cancel_safe(m
     app=QApplication.instance() or QApplication([]);source=[dict(id=1,name='湖泊'),dict(id=2,name='道路')]
     dialog=ClassesDialog(source,3,{1},1);dialog.show();app.processEvents();before=copy.deepcopy(source)
     calls=[]
-    monkeypatch.setattr('geoforma.ui.color_controls.choose_color',lambda color,name,parent:(calls.append((color,name)) or '#12AB34'))
+    monkeypatch.setattr('geoforma.ui.classes_dialog.choose_color',lambda color,name,parent:(calls.append((color,name)) or '#12AB34'))
     QTest.mouseClick(dialog.swatches[2],Qt.MouseButton.LeftButton)
-    assert dialog.list.currentRow()==1 and dialog.name.text()=='道路'
+    assert dialog.list.currentRow()==1 and dialog.name_inputs[2].text()=='道路'
     assert dialog.classes[1]['color']=='#12AB34' and dialog.swatches[2].color.name()=='#12ab34'
     assert calls==[(default_color(2),'道路')] and source==before
-    monkeypatch.setattr('geoforma.ui.color_controls.choose_color',lambda *args:None)
+    monkeypatch.setattr('geoforma.ui.classes_dialog.choose_color',lambda *args:None)
     QTest.mouseClick(dialog.swatches[1],Qt.MouseButton.LeftButton)
     assert dialog.classes[0]==before[0] and not dialog.delete_button.isEnabled()
     dialog.reject();assert source==before
@@ -63,8 +63,8 @@ def test_color_swatch_click_updates_only_staged_category_and_keeps_cancel_safe(m
 def test_clicking_category_text_still_selects_the_row():
     app=QApplication.instance() or QApplication([]);dialog=ClassesDialog([dict(id=1,name='湖泊'),dict(id=2,name='道路')],3,set(),1)
     dialog.show();app.processEvents()
-    row=dialog.list.itemWidget(dialog.list.item(1));QTest.mouseClick(row,Qt.MouseButton.LeftButton,pos=row.rect().center())
-    assert dialog.list.currentRow()==1 and dialog.name.text()=='道路'
+    field=dialog.name_inputs[2];QTest.mouseClick(field,Qt.MouseButton.LeftButton,pos=field.rect().center())
+    assert dialog.list.currentRow()==1 and field.text()=='道路'
     dialog.close()
 
 
@@ -89,7 +89,7 @@ def test_picker_supports_hex_and_rgb_with_no_alpha(monkeypatch):
 
 def test_colors_survive_rename_snapshot_and_project_reopen(tmp_path):
     app=QApplication.instance() or QApplication([]);project=new_project();project['classes'][0]['color']='#12ab34'
-    dialog=ClassesDialog(project['classes'],2,set(),1);dialog.name.setText('湖泊');dialog.rename()
+    dialog=ClassesDialog(project['classes'],2,set(),1);dialog.name_inputs[1].setText('湖泊');assert dialog.commit_names()
     assert dialog.classes[0]['color']=='#12ab34'
     project['classes']=dialog.classes;snapshot=project_snapshot(project);project['classes'][0]['color']='#345678'
     path=tmp_path/'colors.gfm';save_project(snapshot,path)

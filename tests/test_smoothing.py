@@ -55,7 +55,7 @@ def test_small_parts_holes_box_and_nonoverlap_survive():
 def test_manual_reshape_is_not_clipped_to_its_old_prompt_box(monkeypatch):
     from geoforma import smoothing
     original=box(5,5,15,15);record=dict(label('manual',original),box=[5,5,10,10],editing_state='manual')
-    monkeypatch.setattr(smoothing,'smooth_geometry',lambda geometry,*args:geometry)
+    monkeypatch.setattr(smoothing,'_smooth_shape',lambda geometry,*args:geometry)
     result=smooth_batch([record],1,{'width':20,'height':20})
     assert shape(result[0]['geometry']).equals(original)
 

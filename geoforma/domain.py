@@ -28,7 +28,7 @@ def new_project(model=None):
     return {"schema": 1, "cache_id": uid(), "name": "Untitled", "images": [], "labels": [],
             "classes": [{"id": 1, "name": "类别 1"}], "next_class_id": 2,
             "model": normalize_model(model) if model is not None else recommended_model(),
-            "workspace": {"single_polygon": True}, "export_crs": "", "export_label_field": DEFAULT_LABEL_FIELD,
+            "workspace": {"single_polygon": True, "fill_holes": False}, "export_crs": "", "export_label_field": DEFAULT_LABEL_FIELD,
             "smoothing": {"individual": {"enabled": True, "value": 1.0}}}
 
 

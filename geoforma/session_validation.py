@@ -99,5 +99,5 @@ def validate_sessions(project):
     if 'tool' in workspace and not compatible_tool(workspace['tool'],'individual'):raise ValueError('工作状态的工具无效。')
     tools=workspace.get('tools',{})
     if not isinstance(tools,dict) or any(mode!='individual' or not compatible_tool(tool,mode) for mode,tool in tools.items()):raise ValueError('标注模式的工具记录无效。')
-    for flag in ('auto_apply','single_polygon','preparation_paused','raw_view'):
+    for flag in ('auto_apply','single_polygon','fill_holes','preparation_paused','raw_view'):
         if flag in workspace and type(workspace[flag]) is not bool:raise ValueError('工作状态的选项无效。')

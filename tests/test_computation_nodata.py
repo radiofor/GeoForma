@@ -83,7 +83,7 @@ def test_smoothing_cannot_expand_a_model_label_into_missing_pixels(tmp_path,monk
     image,_=reference(tmp_path);image['model_recipe']=make_recipe(image,[1,1,1])
     original=box(20,5,38,35).difference(box(26,10,34,30))
     label={'id':'target','image_id':image['id'],'status':'confirmed','geometry':mapping(original)}
-    monkeypatch.setattr(smoothing,'smooth_geometry',lambda *args:mapping(box(20,5,38,35)))
+    monkeypatch.setattr(smoothing,'_smooth_shape',lambda *args:box(20,5,38,35))
     result=smoothing.smooth_batch([label],1,image)[0]
     assert not shape(result['geometry']).covers(Point(30,20))
 
@@ -94,7 +94,7 @@ def test_manual_smoothing_handles_image_without_model_bands(tmp_path,monkeypatch
     image,_=reference(tmp_path);image['model_recipe']=None;image['display_recipe']=None
     original=box(20,5,38,35).difference(box(26,10,34,30))
     label={'id':'target','image_id':image['id'],'status':'confirmed','geometry':mapping(original)}
-    monkeypatch.setattr(smoothing,'smooth_geometry',lambda *args:mapping(box(20,5,38,35)))
+    monkeypatch.setattr(smoothing,'_smooth_shape',lambda *args:box(20,5,38,35))
     result=smoothing.smooth_batch([label],1,image)[0]
     assert not shape(result['geometry']).covers(Point(30,20))
 

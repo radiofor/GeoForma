@@ -54,6 +54,7 @@ class ProjectWorkflow:
             'view_window':self.view.visible_window() if self.image else None,'operation':0,'preparation_paused':self.preparation.paused}
         self.project['workspace']['annotation_mode']=self.annotation_mode();self.project['workspace']['auto_apply']=self.auto_apply.isChecked()
         self.project['workspace']['single_polygon']=self.single_polygon.isChecked()
+        self.project['workspace']['fill_holes']=self.fill_holes.isChecked()
         self.project['workspace']['navigation']=self.view.capture_navigation() if self.image else None
         self.project['workspace']['raw_view']=not self.raw_view_action.isChecked()
         self.tool_modes[self.annotation_mode()]=self.view.selected_mode
@@ -110,12 +111,14 @@ class ProjectWorkflow:
         if request is None:return
         from ..resource_location import require_resource_dir
         path=request.path;original_path=request.project_path
+        cache=self.smoother.geometry_cache if request.epoch==self.project_epoch else None
+        cache_epoch=cache.snapshot() if cache is not None else None
         def save_snapshot(t):
             if original_path is None and require_resource_dir()!=path.parent.parent:raise RuntimeError('资源目录已更改，自动保存已取消。')
             if original_path is not None:
                 if not original_path.is_file():raise RuntimeError('项目文件不存在或已移动，自动保存已暂停；请先将项目文件移回原位置。')
-                save_project(request.snapshot,original_path)
-            else:save_project(request.snapshot,path)
+                save_project(request.snapshot,original_path,smoothing_cache=cache,cache_epoch=cache_epoch)
+            else:save_project(request.snapshot,path,smoothing_cache=cache,cache_epoch=cache_epoch)
         task=Task(save_snapshot);self.autosave_task=task
         self.background_activity.set('autosave','自动保存',request.title,task)
         def saved(_):
@@ -159,7 +162,8 @@ class ProjectWorkflow:
             # The visible action is used only for the first save. Keep this
             # synchronous API safe for existing automation as well.
             self.storage_pool.waitForDone()
-            save_project(snapshot,path);self.project_saves.saved(path,order)
+            cache=self.smoother.geometry_cache
+            save_project(snapshot,path,smoothing_cache=cache,cache_epoch=cache.snapshot());self.project_saves.saved(path,order)
             if first_save:
                 # The saved snapshot supersedes queued recovery writes for this
                 # workspace; no later edit can occur while this method blocks.
@@ -183,6 +187,7 @@ class ProjectWorkflow:
         self.smoother.clear();self.project_epoch+=1;self.preparation.reset();self.image_sessions.clear();self.project=new_project(last_model(self.settings));self.project_path=None;self.image=None;self.draft={};self.label_undo=[];self.label_redo=[];self.prompt_undo=[];self.prompt_redo=[];self.selected_id=None;self.selected_ids.clear();self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation,clear_cache=True);self.view.set_image(0,0);self.refresh_classes();self.refresh_images();self.refresh_labels();self.update_draft_info();self.update_controls();self.refresh_project_title();self.dirty=False
         self.mode_histories.clear();self.auto_apply.setChecked(True)
         self.single_polygon.setChecked(self.project['workspace']['single_polygon'])
+        blocked=self.fill_holes.blockSignals(True);self.fill_holes.setChecked(self.project['workspace']['fill_holes']);self.fill_holes.blockSignals(blocked)
         self.label_lookup.clear();self.label_indexes.clear();self.label_index_key=None;self.label_index=None
         self.clear_project_cache()
 

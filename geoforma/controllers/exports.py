@@ -83,13 +83,16 @@ class ExportWorkflow:
         classes=copy.deepcopy(self.project['classes'])
         from ..source_catalog import guard_snapshot
         sources=guard_snapshot(self.project)
-        labels=copy.deepcopy(labels)
+        # Confirmed label geometry and prompt arrays are immutable domain values;
+        # detach the records without copying their potentially large contours.
+        labels=[dict(label) for label in labels]
         protected_paths=(self.project_path,) if self.project_path else ()
         from ..smoothing import settings,smooth_batch
         smoothing=settings(self.project,self.annotation_mode())
+        cache=self.smoother.geometry_cache;cache_epoch=cache.snapshot()
         def work(task):
             from ..exports import export_vector
-            output=[dict(label,smoothing_applied=smoothing['value']) for label in smooth_batch(labels,smoothing['value'],image,task)] if smoothing['enabled'] else labels
+            output=[dict(label,smoothing_applied=smoothing['value']) for label in smooth_batch(labels,smoothing['value'],image,task,cache,cache_epoch)] if smoothing['enabled'] else labels
             result=export_vector(image,output,path,crs,task,classes,sources=sources,label_field=field,protected_paths=protected_paths)
             return result
         def exported(result):

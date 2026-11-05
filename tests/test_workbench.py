@@ -198,7 +198,7 @@ def test_close_aborts_when_autosave_cannot_write(workbench,monkeypatch):
     w,app,wait,errors=workbench;populate(w,wait)
     import PySide6.QtWidgets as ui
     warnings=[]
-    def fail_save(*args):raise OSError('disk full')
+    def fail_save(*args,**kwargs):raise OSError('disk full')
     monkeypatch.setattr('geoforma.controllers.projects.save_project',fail_save);monkeypatch.setattr(ui.QMessageBox,'warning',lambda *a:warnings.append(a))
     w.autosave=MainWindow.autosave.__get__(w);w.mark_dirty();w.close();wait()
     assert w.isVisible() and not w.closing and w.dirty and warnings

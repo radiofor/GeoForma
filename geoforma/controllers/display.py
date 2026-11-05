@@ -14,12 +14,19 @@ class DisplayWorkflow:
     def apply_raster(self,value,window,overview):
         if self.closing:return
         switching=overview and self.reference_transition_pending
-        if switching:self.view.layers.begin_raster_transition()
-        self.view.show_raster(*value,window,overview)
-        if overview:
-            if self.view.layers.raster_epoch!=self.render_generation:self.view.layers.clear_detail()
-            self.view.layers.raster_epoch=self.render_generation;self.render_timer.start()
-        if switching:self.reference_transition_pending=False;self.visible_reference=self.display_reference;self.view.layers.finish_raster_transition()
+        viewport=self.view.viewport()
+        updates=viewport.updatesEnabled()
+        if switching and updates:viewport.setUpdatesEnabled(False)
+        try:
+            self.view.show_raster(*value,window,overview)
+            if overview:
+                if self.view.layers.raster_epoch!=self.render_generation:self.view.layers.clear_detail()
+                self.view.layers.raster_epoch=self.render_generation;self.render_timer.stop()
+                generation=self.render_generation
+                QTimer.singleShot(0,self,lambda:self.request_render() if not self.closing and self.render_generation==generation and not self.render_timer.isActive() else None)
+            if switching:self.reference_transition_pending=False;self.visible_reference=self.display_reference
+        finally:
+            if switching and updates:viewport.setUpdatesEnabled(True);viewport.update()
         # Raster arrival changes only pixels. Labels are refreshed by annotation
         # and index events, so panning never walks or restyles every polygon.
 

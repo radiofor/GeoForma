@@ -76,13 +76,11 @@ def test_reshaping_existing_draft_waits_for_label_confirmation(workbench):
     assert w.project['labels'][0]==original and not w.model_prompts_locked()
 
 
-@pytest.mark.parametrize('method',['button','right_click'])
-def test_finish_controls_save_and_leave_tool(workbench,method):
+def test_finish_controls_save_and_leave_tool(workbench):
     w,app,_=workbench;original=copy.deepcopy(w.project['labels'])
     w.show();app.processEvents();w.begin_reshape()
     w.reshape_session['stroke']=copy.deepcopy(OUT);w.view.set_reshape_stroke(OUT);w.update_controls()
-    if method=='button':w.reshape_preview_button.click()
-    else:QTest.mouseClick(w.view.viewport(),Qt.MouseButton.RightButton)
+    QTest.mouseClick(w.view.viewport(),Qt.MouseButton.RightButton)
     deadline=time.monotonic()+5
     while w.task and time.monotonic()<deadline:app.processEvents();QTest.qWait(2)
     assert w.reshape_session is None and not w.view.reshape_items and w.view.mode=='reshape'

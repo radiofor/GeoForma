@@ -89,11 +89,24 @@ class ModelEngine:
         rgb,valid=self.window_input(image,window)
         args=(image,window,rgb,valid,request['points'],request.get('box'),request.get('logits'),request.get('seed'))
         preview=getattr(task.signals,'preview',None)
-        result=self.backend.predict(*args,on_mask=preview.emit if preview else None,single_polygon=bool(request.get('single_polygon'))) if getattr(self.backend,'streaming_preview',False) else self.backend.predict(*args)
+        def emit_preview(value):
+            if request.get('fill_holes'):
+                from ..hole_filling import fill_preview
+                value=dict(value,mask=fill_preview(value['mask'],valid))
+            preview.emit(value)
+        result=self.backend.predict(*args,on_mask=emit_preview if preview else None,single_polygon=bool(request.get('single_polygon'))) if getattr(self.backend,'streaming_preview',False) else self.backend.predict(*args)
         if request.get('single_polygon') or request.get('box'):
             from ..single_polygon import constrain_choice
             choices=[constrain_choice(choice,request['points'],bool(request.get('single_polygon')),request.get('box')) for choice in result['choices']]
             result['choices']=[choice for choice in choices if choice is not None]
+        if request.get('fill_holes'):
+            from ..hole_filling import fill_prediction
+            from shapely.geometry import shape
+            choices=[]
+            for choice in result['choices']:
+                task.check();geometry=fill_prediction(choice['geometry'],valid,window)
+                if geometry:choices.append(dict(choice,geometry=geometry,pixels=int(round(shape(geometry).area))))
+            result['choices']=choices
         result['checkpoint']=config['checkpoint'];task.check();return result
 
 
@@ -117,5 +130,8 @@ class ModelEngine:
         rgb,valid=self.window_input(image,window)
         kwargs={'single_polygon':True} if request.get('single_polygon') else {}
         result=self.backend.predict(image,window,rgb,valid,request['points'],request.get('box'),None,request.get('seed'),True,**kwargs)
+        if request.get('fill_holes') and result is not None:
+            from ..hole_filling import fill_preview
+            result=dict(result,mask=fill_preview(result['mask'],valid))
         task.check();return result
 

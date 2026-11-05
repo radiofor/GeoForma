@@ -52,6 +52,57 @@ def test_switch_image_discards_even_old_overview():
     queue.close();pool.waitForDone()
 
 
+def test_cached_image_is_published_without_waiting_for_obsolete_read():
+    app=QApplication.instance() or QApplication([]);pool=QThreadPool();pool.setMaxThreadCount(1)
+    release=threading.Event();started=threading.Event();published=[];reads=[]
+    def reader(im,*args):
+        reads.append(im['id']);started.set();release.wait(4)
+        return np.zeros((2,2,3),np.uint8),np.ones((2,2),bool)
+    queue=RasterRenderQueue(pool,reader);queue.rendered.connect(lambda value,window,overview:published.append(int(value[0][0,0,0])))
+    window=(0,0,1000,1000);cached=(np.full((2,2,3),7,np.uint8),np.ones((2,2),bool))
+    queue.prime(image('cached'),window,100,cached)
+    try:
+        queue.request(image('old'),1,window,100,True);wait(app,started.is_set)
+        queue.reset(2);queue.request(image('cached'),2,window,100,True)
+        assert published==[7] and reads==['old'] and not release.is_set()
+        release.set();wait(app,lambda:queue.task is None)
+        assert published==[7] and reads==['old']
+    finally:release.set();queue.close();pool.waitForDone()
+
+
+def test_new_cached_overview_supersedes_same_generation_active_read():
+    app=QApplication.instance() or QApplication([]);pool=QThreadPool();pool.setMaxThreadCount(1)
+    release=threading.Event();started=threading.Event();published=[]
+    def reader(*args):
+        started.set();release.wait(4)
+        return np.zeros((2,2,3),np.uint8),np.ones((2,2),bool)
+    queue=RasterRenderQueue(pool,reader);queue.rendered.connect(lambda value,window,overview:published.append(int(value[0][0,0,0])))
+    window=(0,0,1000,1000);cached=(np.full((2,2,3),7,np.uint8),np.ones((2,2),bool))
+    queue.prime(image('cached'),window,100,cached)
+    try:
+        queue.request(image('old'),1,window,100,True);wait(app,started.is_set)
+        queue.request(image('cached'),1,window,100,True);assert published==[7]
+        release.set();wait(app,lambda:queue.task is None)
+        assert published==[7] and queue.discarded==1
+    finally:release.set();queue.close();pool.waitForDone()
+
+
+def test_duplicate_inflight_request_is_published_once():
+    app=QApplication.instance() or QApplication([]);pool=QThreadPool();pool.setMaxThreadCount(1)
+    started=threading.Event();release=threading.Event();published=[];reads=[]
+    def reader(im,window,*args):
+        reads.append(window);started.set();release.wait(4)
+        return np.zeros((2,2,3),np.uint8),np.ones((2,2),bool)
+    queue=RasterRenderQueue(pool,reader);queue.rendered.connect(lambda value,window,overview:published.append(window))
+    window=(0,0,1000,1000)
+    try:
+        queue.request(image(),1,window,100,True);wait(app,started.is_set)
+        queue.request(image(),1,window,100,True);queue.request(image(),1,window,100,True)
+        release.set();wait(app,lambda:queue.task is None)
+        assert reads==[window] and published==[window]
+    finally:release.set();queue.close();pool.waitForDone()
+
+
 def test_image_switch_keeps_overview_and_latest_detail_while_old_read_finishes():
     app=QApplication.instance() or QApplication([]);pool=QThreadPool();pool.setMaxThreadCount(1)
     release=threading.Event();started=threading.Event();published=[];reads=[]
@@ -103,6 +154,40 @@ def test_raster_item_reused_when_display_pixels_change():
     view.show_preview(valid,(100,100,200,200));assert view.preview_item is preview
     view.set_overlay_visibility(False);assert not preview.isVisible()
     view.close()
+
+
+def test_immutable_cached_frames_reuse_pixmap_across_image_switches():
+    from geoforma.viewport import ImageView
+    app=QApplication.instance() or QApplication([]);view=ImageView();view.set_image(100,100)
+    rgb=np.full((10,10,3),20,np.uint8);valid=np.ones((10,10),bool)
+    rgb.setflags(write=False);valid.setflags(write=False)
+    view.show_raster(rgb,valid,(0,0,100,100),True);first=view.base_item.pixmap().cacheKey()
+    assert len(view.layers.pixmap_cache)==1
+    view.set_image(100,100);view.show_raster(rgb,valid,(0,0,100,100),True)
+    assert view.base_item.pixmap().cacheKey()==first and len(view.layers.pixmap_cache)==1
+    view.scene().clear();view.layers.reset();view.close();view.deleteLater();app.processEvents()
+
+
+def test_mutable_frames_are_not_reused_after_pixel_changes():
+    from geoforma.viewport import ImageView
+    app=QApplication.instance() or QApplication([]);view=ImageView();view.set_image(10,10)
+    rgb=np.zeros((10,10,3),np.uint8);valid=np.ones((10,10),bool)
+    view.show_raster(rgb,valid,(0,0,10,10),True);rgb[:]=80
+    view.show_raster(rgb,valid,(0,0,10,10),True)
+    assert view.base_item.pixmap().toImage().pixelColor(0,0).red()==80 and len(view.layers.pixmap_cache)==0
+    view.scene().clear();view.layers.reset();view.close();view.deleteLater();app.processEvents()
+
+
+def test_pixmap_cache_respects_memory_limit_and_lru():
+    from PySide6.QtGui import QPixmap
+    from geoforma.rendering.pixmap_cache import RasterPixmapCache
+    app=QApplication.instance() or QApplication([]);cache=RasterPixmapCache(max_entries=2,max_bytes=128)
+    first=np.zeros((4,4,3),np.uint8);second=np.ones((4,4,3),np.uint8);mask=np.ones((4,4),bool)
+    for array in (first,second,mask):array.setflags(write=False)
+    cache.put(first,mask,QPixmap(4,4));assert cache.get(first,mask) is not None
+    cache.put(second,mask,QPixmap(4,4));assert cache.get(first,mask) is None
+    assert cache.get(second,mask) is not None and cache.bytes==128
+    cache.clear();assert len(cache)==0 and cache.bytes==0
 
 
 def test_detail_nodata_does_not_reveal_coarser_overview():

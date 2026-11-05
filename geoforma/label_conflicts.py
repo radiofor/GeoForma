@@ -4,17 +4,22 @@ from shapely.ops import unary_union
 from shapely.strtree import STRtree
 
 
-def polygonal(geometry):
+def polygonal_shape(geometry):
     if geometry.is_empty:return None
     if not geometry.is_valid:raise ValueError('标签几何无效，未执行自动修复。')
-    if geometry.geom_type in ('Polygon','MultiPolygon'):return mapping(geometry)
+    if geometry.geom_type in ('Polygon','MultiPolygon'):return geometry
     if geometry.geom_type!='GeometryCollection':return None
     parts=[]
     for part in geometry.geoms:
-        result=polygonal(part)
+        result=polygonal_shape(part)
         if result:
-            g=shape(result);parts.extend(list(g.geoms) if g.geom_type=='MultiPolygon' else [g])
-    return mapping(MultiPolygon(parts)) if parts else None
+            parts.extend(list(result.geoms) if result.geom_type=='MultiPolygon' else [result])
+    return MultiPolygon(parts) if parts else None
+
+
+def polygonal(geometry):
+    result=polygonal_shape(geometry)
+    return mapping(result) if result is not None else None
 
 
 def others(label,labels):

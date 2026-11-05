@@ -19,6 +19,7 @@ class ControlState:
         controls.enable(self.project_actions['save'],not locked and self.project_path is None)
         for key in ('select','pan'):controls.enable(self.mode_actions[key],not busy)
         controls.enable(self.single_polygon,not busy)
+        controls.enable(self.fill_holes,not busy)
         for action in self.actions_to_lock:controls.enable(action,not physical_busy)
         controls.enable(self.import_button,not physical_busy);controls.enable(self.images,browse);controls.enable(self.model_button,not physical_busy)
         controls.enable(self.import_reference_button,not physical_busy and self.reshape_session is None)
