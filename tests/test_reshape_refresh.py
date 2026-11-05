@@ -42,6 +42,6 @@ def test_right_click_accepts_repeated_crossings_with_one_label_refresh(workbench
     while w.task:app.processEvents();time.sleep(.002);assert time.monotonic()<deadline
     settle(app)
     assert calls==[1] and w.reshape_session is None and not w.view.reshape_items
-    assert shape(w.draft['geometry']).equals(EXPECTED) and w.draft['editing_state']=='manual'
-    assert w.project['labels']==before
-    w.undo_context();assert w.draft.get('editing_state','model')=='model'
+    assert not w.draft and shape(w.project['labels'][0]['geometry']).equals(EXPECTED)
+    assert w.project['labels'][0]['editing_state']=='manual'
+    w.undo_context();assert w.project['labels']==before

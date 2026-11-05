@@ -36,7 +36,7 @@ def test_target_changes_are_locked_but_save_and_navigation_remain_available(work
 
 
 def test_manual_geometry_rejects_prompt_shortcuts_without_changing_active_tool(workbench):
-    w,app,_=workbench;w.begin_reshape();preview(w,app);w.begin_reshape()
+    w,app,_=workbench;w.edit_selected(locate=False);w.begin_reshape();preview(w,app);w.begin_reshape()
     for mode in ('positive','negative','box','select_points'):
         assert not w.mode_actions[mode].isEnabled()
         w.set_tool(mode)

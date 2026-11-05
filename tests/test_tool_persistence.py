@@ -114,9 +114,9 @@ def test_reopening_suspended_reshape_restores_pan_and_construction_line(reshape_
 
 
 @pytest.mark.parametrize('tool',['reshape','pan'])
-def test_saving_completed_reshape_keeps_tool_and_does_not_start_another_edit(reshape_workbench,tool):
+def test_automatic_reshape_save_keeps_tool_and_does_not_start_another_edit(reshape_workbench,tool):
     w,app,tmp=reshape_workbench;prepare_preview(w);w.commit_reshape();w.set_tool(tool)
-    assert w.confirm_button.isEnabled() and w.draft['editing_state']=='manual'
+    assert not w.confirm_button.isEnabled() and not w.draft
     w.confirm_button.click()
     app.processEvents();assert_tool(w,tool)
     assert not w.draft and w.reshape_session is None and not w.view.reshape_points

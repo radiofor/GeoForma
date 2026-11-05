@@ -1,5 +1,6 @@
 """Editable category values stay separate from references and reach exported files."""
 import copy,json
+from pathlib import Path
 import numpy as np
 import pytest
 import rasterio
@@ -177,21 +178,22 @@ def test_format_selector_controls_dialog_and_actual_output(workbench,source,tmp_
     w.project['labels']=[dict(labels_for(source)[0],annotation_mode='individual')]
     w.export_kind.setCurrentIndex(w.export_kind.findData(suffix));dialog=[]
     def save_dialog(*args):
-        dialog.append(args);return str(tmp_path/'selected'),''
+        dialog.append(args);return str(tmp_path/'selected.v2'),''
     monkeypatch.setattr('geoforma.controllers.exports.QFileDialog.getSaveFileName',save_dialog)
     w.export();wait()
-    path=tmp_path/('selected'+suffix);dataset=ogr.Open(str(path))
+    path=tmp_path/('selected.v2'+suffix);dataset=ogr.Open(str(path))
     assert dataset is not None and dataset.GetDriver().GetName()==driver
-    assert filter_text in dialog[0][3] and dialog[0][2].endswith(suffix) and not errors
+    assert filter_text in dialog[0][3] and Path(dialog[0][2]).name==Path(source['path']).stem+'_labels' and not errors
     dataset=None
 
 
-def test_changed_extension_does_not_overwrite_without_confirmation(workbench,source,tmp_path,monkeypatch):
+@pytest.mark.parametrize('name',['selected','selected.shp'])
+def test_changed_extension_does_not_overwrite_without_confirmation(workbench,source,tmp_path,monkeypatch,name):
     from PySide6.QtWidgets import QMessageBox
     w,app,wait,errors=workbench;w.image=source;w.project['images']=[source]
     w.project['labels']=[dict(labels_for(source)[0],annotation_mode='individual')]
     target=tmp_path/'selected.gpkg';target.write_bytes(b'keep')
-    monkeypatch.setattr('geoforma.controllers.exports.QFileDialog.getSaveFileName',lambda *args:(str(tmp_path/'selected.shp'),''))
+    monkeypatch.setattr('geoforma.controllers.exports.QFileDialog.getSaveFileName',lambda *args:(str(tmp_path/name),''))
     asked=[]
     monkeypatch.setattr(QMessageBox,'question',lambda *args:(asked.append(args) or QMessageBox.StandardButton.No))
     w.export();assert len(asked)==1 and target.read_bytes()==b'keep' and w.task is None and not errors

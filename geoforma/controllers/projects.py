@@ -12,7 +12,7 @@ from ..storage import save_project, project_snapshot
 from ..tasks import Task
 from ..model_preferences import last_model
 from ..operation_state import interaction_locked,can_start_operation
-from ..project_files import PROJECT_SUFFIX,RECOVERY_NAME,SAVE_FILTER,OPEN_FILTER,new_project_path,project_name
+from ..project_files import RECOVERY_NAME,SAVE_FILTER,OPEN_FILTER,new_project_path,project_name
 
 
 class ProjectWorkflow:
@@ -147,7 +147,7 @@ class ProjectWorkflow:
         path=self.project_path
         first_save=path is None
         if not path:
-            value,_=QFileDialog.getSaveFileName(self,ui_text('projects.save.004'),str(Path.cwd()/('project'+PROJECT_SUFFIX)),SAVE_FILTER)
+            value,_=QFileDialog.getSaveFileName(self,ui_text('projects.save.004'),str(Path.cwd()/'project'),SAVE_FILTER)
             if not value:return
             path=new_project_path(value)
             if path!=Path(value) and path.exists():

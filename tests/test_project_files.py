@@ -20,14 +20,17 @@ def test_project_filename_and_display_name(tmp_path,name,expected):
     assert project_name(result)==expected[:-4]
 
 
-def test_first_save_uses_gfm_and_autosaves_same_file(automatic_project,monkeypatch):
+@pytest.mark.parametrize('input_name,expected_name',[
+    ('lake','lake.gfm'),('lake.v2','lake.v2.gfm'),('lake.GFM','lake.GFM'),
+])
+def test_first_save_uses_gfm_and_autosaves_same_file(automatic_project,monkeypatch,input_name,expected_name):
     w,app,tmp=automatic_project;dialog=[]
-    def choose(*args):dialog.append(args);return str(tmp/'lake'),''
+    def choose(*args):dialog.append(args);return str(tmp/input_name),''
     monkeypatch.setattr(QFileDialog,'getSaveFileName',choose)
-    w.save();path=tmp/'lake.gfm'
-    assert w.project_path==path and w.project_title.text()=='lake'
-    assert dialog[0][2].endswith('project.gfm') and '*.gfm' in dialog[0][3]
-    assert json.loads(path.read_text(encoding='utf-8'))['name']=='lake'
+    w.save();path=tmp/expected_name
+    assert w.project_path==path and w.project_title.text()==expected_name[:-4]
+    assert Path(dialog[0][2]).name=='project' and '*.gfm' in dialog[0][3]
+    assert json.loads(path.read_text(encoding='utf-8'))['name']==expected_name[:-4]
     w.project['classes'][0]['name']='修改后';w.mark_dirty();w.autosave()
     until(app,lambda:not w.dirty and w.autosave_task is None)
     assert load_project(path)['classes'][0]['name']=='修改后'

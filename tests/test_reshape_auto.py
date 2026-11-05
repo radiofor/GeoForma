@@ -1,9 +1,9 @@
-"""Direct strokes edit every crossed target and wait for one explicit save."""
+"""Direct strokes save confirmed targets and preserve independent drafts."""
 import copy,time,json
 import pytest
 from PySide6.QtCore import Qt,QPointF
 from PySide6.QtTest import QTest
-from shapely.geometry import box,mapping,shape
+from shapely.geometry import box,mapping,shape,MultiPolygon
 from test_reshape import workbench,raster_image,OUT
 from test_smoothing import settled
 
@@ -29,16 +29,13 @@ def draw(w,app,points):
 
 
 @pytest.mark.parametrize('selected',[None,'target','other'])
-def test_stroke_ignores_selection_and_stays_smooth_until_enter(workbench,selected):
+def test_stroke_ignores_selection_and_saves_with_smoothing(workbench,selected):
     w,app,_=workbench
     w.project['labels'].append(dict(w.project['labels'][0],id='other',geometry=mapping(box(60,60,70,70))))
     w.selected_id=selected;w.selected_ids={selected} if selected else set();w.refresh_labels()
     before=copy.deepcopy(w.project['labels']);w.smooth_enabled.setChecked(True);settled(w,app)
     draw(w,app,OUT)
-    assert w.project['labels']==before and w.draft['base_id']=='target'
-    assert not shape(w.view.overlay_records['__draft'].geometry_value).equals(shape(w.draft['geometry']))
-    QTest.keyClick(w.view.viewport(),Qt.Key.Key_Return);wait(w,app)
-    assert not w.draft
+    assert not w.draft and w.project['labels']!=before
     assert all(row.status=='已保存' for row in w.label_presenter.rows)
     assert next(l for l in w.project['labels'] if l['id']=='other')==before[1]
     assert not shape(w.view.overlay_records['target'].geometry_value).equals(shape(next(l for l in w.project['labels'] if l['id']=='target')['geometry']))
@@ -53,13 +50,11 @@ def two_labels(w):
 def test_multiple_crossed_labels_save_and_undo_as_one_transaction(workbench):
     w,app,tmp=workbench;two_labels(w);before=copy.deepcopy(w.project['labels'])
     draw(w,app,[[18,25],[52,25]])
-    assert len(w.draft['reshape_batch'])==2 and w.project['labels']==before
-    assert all(row.status=='未保存' for row in w.label_presenter.rows)
+    assert not w.draft and w.project['labels']!=before
+    assert all(row.status=='已保存' for row in w.label_presenter.rows)
     assert shape(w.view.overlay_records['other'].geometry_value).area<100
-    # Unsaved results survive reopening and remain a single confirmation.
+    # The automatic transaction and its undo survive reopening.
     w.project_path=tmp/'batch.gfm';w.save();w.open_project(w.project_path);wait(w,app)
-    assert len(w.draft['reshape_batch'])==2
-    QTest.keyClick(w.view.viewport(),Qt.Key.Key_Return);wait(w,app)
     assert not w.draft and len(w.label_undo)==1
     assert all(l['editing_state']=='manual' and shape(l['geometry']).area<100 for l in w.project['labels'])
     assert {l['class_id'] for l in w.project['labels']}=={1,2}
@@ -82,25 +77,71 @@ def test_unbound_stroke_survives_reopen(workbench):
     assert w.reshape_session['target']=='auto' and w.reshape_session['stroke']==[[18,25],[52,25]]
 
 
-def test_batch_includes_an_unsaved_draft_and_can_be_cancelled(workbench):
+def test_batch_with_unsaved_draft_preserves_its_status_and_undo(workbench):
     w,app,_=workbench
     w.draft={'geometry':mapping(box(40,20,50,30)),'points':[],'pending':False}
     w.refresh_labels();before=copy.deepcopy(w.project['labels']);draft=copy.deepcopy(w.draft)
     draw(w,app,[[18,25],[52,25]])
-    assert len(w.draft['reshape_batch'])==2 and not w.draft.get('base_id')
+    assert not w.draft.get('base_id') and w.project['labels']!=before
+    assert shape(w.draft['geometry']).area<100
+    assert sorted(row.status for row in w.label_presenter.rows)==['已保存','未保存']
     assert '__draft' in w.view.overlay_records and 'target' in w.view.overlay_records
     w.undo_context();assert w.draft==draft and w.project['labels']==before
-    w.redo_context();assert len(w.draft['reshape_batch'])==2
+    w.redo_context();assert w.project['labels']!=before and shape(w.draft['geometry']).area<100
     QTest.keyClick(w.view.viewport(),Qt.Key.Key_Return);wait(w,app)
-    assert not w.draft and len(w.project['labels'])==2 and len(w.label_undo)==1
-    w.undo_label();assert w.project['labels']==before
+    assert not w.draft and len(w.project['labels'])==2 and len(w.label_undo)==2
+    w.undo_label();w.undo_label();assert w.project['labels']==before
 
 
-def test_save_failure_does_not_publish_part_of_a_batch(workbench,monkeypatch):
-    w,app,_=workbench;two_labels(w);draw(w,app,[[18,25],[52,25]])
-    before=copy.deepcopy(w.project['labels']);errors=[]
-    monkeypatch.setattr(w,'error',errors.append)
-    # Force the second staged contour to be completely occupied by the first.
-    w.draft['reshape_batch'][1]['geometry']=before[0]['geometry']
-    w.confirm()
-    assert errors and w.draft['reshape_batch'] and w.project['labels']==before and not w.label_undo
+def test_failure_does_not_publish_part_of_a_batch(workbench,monkeypatch):
+    from geoforma import label_conflicts
+    w,app,_=workbench;two_labels(w);before=copy.deepcopy(w.project['labels']);original=label_conflicts.resolve;calls=[]
+    def fail_second(*args,**kwargs):
+        calls.append(1)
+        if len(calls)==2:raise ValueError('不能保存第二个目标')
+        return original(*args,**kwargs)
+    monkeypatch.setattr(label_conflicts,'resolve',fail_second)
+    draw(w,app,[[18,25],[52,25]])
+    assert w.reshape_session and '第二个目标' in w.reshape_session['error']
+    assert w.project['labels']==before and not w.draft and not w.label_undo
+
+
+def test_saved_target_can_be_reshaped_with_an_unrelated_unsaved_draft(workbench):
+    w,app,_=workbench
+    w.draft={'geometry':mapping(box(60,60,70,70)),'points':[[65,65,1]],'pending':False}
+    w.refresh_labels();draft=copy.deepcopy(w.draft);before=copy.deepcopy(w.project['labels'])
+    draw(w,app,OUT)
+    assert w.draft==draft and w.project['labels']!=before
+    assert sorted(row.status for row in w.label_presenter.rows)==['已保存','未保存']
+    saved=copy.deepcopy(w.project['labels']);w.undo_context()
+    assert w.draft==draft and w.project['labels']==before
+    w.redo_context();assert w.draft==draft and w.project['labels']==saved
+
+
+def test_reshape_automatically_writes_saved_project(workbench):
+    from geoforma.storage import load_project
+    w,app,tmp=workbench
+    del w.autosave
+    w.project_path=tmp/'automatic.gfm';w.save()
+    before=copy.deepcopy(w.project['labels']);draw(w,app,OUT)
+    deadline=time.monotonic()+8
+    while w.autosave_task or w.project_saves.busy:
+        app.processEvents();QTest.qWait(2);assert time.monotonic()<deadline
+    restored=load_project(w.project_path)
+    assert restored['labels']!=before
+    assert restored['labels'][0]['status']=='confirmed'
+    assert shape(restored['labels'][0]['geometry']).area==124
+    assert not restored['workspace']['draft']
+
+
+def test_disconnected_saved_result_creates_independent_undoable_rows(workbench):
+    w,app,_=workbench;before=copy.deepcopy(w.project['labels']);w.single_polygon.setChecked(False)
+    w.begin_reshape();session=w.reshape_session
+    result={'geometry':mapping(MultiPolygon([box(20,20,24,30),box(26,20,30,30)])),
+            'stroke':OUT,'alternate':False,'window':[20,20,10,10],'added_pixels':0,'removed_pixels':20}
+    session['preview']=result;w.commit_reshape()
+    assert len(w.project['labels'])==2 and len({item['id'] for item in w.project['labels']})==2
+    assert all(item['geometry']['type']=='Polygon' and item['status']=='confirmed' for item in w.project['labels'])
+    assert len(w.label_presenter.rows)==2 and all(row.status=='已保存' for row in w.label_presenter.rows)
+    w.undo_context();assert w.project['labels']==before
+    w.redo_context();assert len(w.project['labels'])==2

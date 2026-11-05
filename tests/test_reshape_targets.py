@@ -78,7 +78,7 @@ def test_reshaping_existing_draft_waits_for_label_confirmation(workbench):
 
 
 @pytest.mark.parametrize('method',['button','right_click'])
-def test_finish_controls_apply_and_leave_tool_without_saving(workbench,method):
+def test_finish_controls_save_and_leave_tool(workbench,method):
     w,app,_=workbench;original=copy.deepcopy(w.project['labels'])
     w.show();app.processEvents();w.begin_reshape()
     w.reshape_session['stroke']=copy.deepcopy(OUT);w.view.set_reshape_stroke(OUT);w.update_controls()
@@ -88,9 +88,10 @@ def test_finish_controls_apply_and_leave_tool_without_saving(workbench,method):
     while w.task and time.monotonic()<deadline:app.processEvents();QTest.qWait(2)
     assert w.reshape_session is None and not w.view.reshape_items and w.view.mode=='reshape'
     assert not w.reshape_group.isVisible() and w.editor_group.isVisible()
-    assert w.project['labels']==original and shape(w.draft['geometry']).area==124
-    assert w.confirm_button.isEnabled()
-    w.undo_context();assert shape(w.draft['geometry']).equals(shape(G)) and not w.model_prompts_locked()
+    assert w.project['labels']!=original and not w.draft
+    assert shape(w.project['labels'][0]['geometry']).area==124
+    assert not w.confirm_button.isEnabled()
+    w.undo_context();assert w.project['labels']==original and not w.model_prompts_locked()
 
 
 def test_unsaved_pending_stroke_survives_project_reopen(workbench):

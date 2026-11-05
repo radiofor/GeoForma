@@ -90,6 +90,7 @@ def workbench(tmp_path,monkeypatch,raster_image):
 
 
 def prepare_preview(w,stroke=OUT):
+    if not w.selected_ids:w.select_label('target')
     w.begin_reshape();w.reshape_session['stroke']=copy.deepcopy(stroke)
     w.reshape_session['preview']=reshape_patch(reshape_intent(w.reshape_session['label']['geometry'],stroke),w.image)
 
@@ -97,7 +98,7 @@ def prepare_preview(w,stroke=OUT):
 def test_commit_lock_undo_redo_and_new_target_independence(workbench):
     w,app,tmp=workbench;original=copy.deepcopy(w.project['labels']);prepare_preview(w);w.commit_reshape();w.confirm()
     assert w.project['labels'][0]['editing_state']=='manual' and not w.model_prompts_locked()
-    before=copy.deepcopy(w.project['labels']);w.edit_selected(locate=False);draft=copy.deepcopy(w.draft)
+    before=copy.deepcopy(w.project['labels']);w.select_label('target');w.edit_selected(locate=False);draft=copy.deepcopy(w.draft)
     calls=[];w.service.predict=lambda *args:calls.append(args)
     w.add_point(25,25,1);w.add_box([20,20,40,40]);w.clear_points();w.clear_box();w.reset_prior();w.predict()
     w.selected_points={0};w.delete_points();w.undo_prompt();w.redo_prompt()
@@ -136,7 +137,7 @@ def test_repeated_manual_edits_need_all_undos_before_unlock(workbench):
 
 
 def test_manual_class_save_and_model_changes_preserve_lock(workbench):
-    w,app,tmp=workbench;prepare_preview(w);w.commit_reshape();w.confirm();w.edit_selected(locate=False)
+    w,app,tmp=workbench;prepare_preview(w);w.commit_reshape();w.confirm();w.select_label('target');w.edit_selected(locate=False)
     before=copy.deepcopy(w.draft);w.invalidate_model_drafts();assert w.draft==before
     w.confirm();assert w.project['labels'][0]['editing_state']=='manual' and w.project['labels'][0]['manual_edits']
     w.select_label('target');w.delete_selected();w.undo_label();w.select_label('target');w.edit_selected(locate=False);assert w.model_prompts_locked()
@@ -159,16 +160,15 @@ def test_incomplete_stroke_recovers_and_cancel_does_not_change_label(workbench):
     w.cancel_reshape();assert json.loads(json.dumps(w.project['labels']))==json.loads(json.dumps(original))
 
 
-def test_async_finish_clears_stroke_without_saving_or_running_sam(workbench):
+def test_async_finish_saves_and_clears_stroke_without_running_sam(workbench):
     w,app,tmp=workbench;original=copy.deepcopy(w.project['labels']);w.begin_reshape();w.reshape_session['stroke']=copy.deepcopy(OUT)
     w.service.predict=lambda *args:pytest.fail('Reshape must not call SAM')
     w.finish_reshape();deadline=time.monotonic()+4
     while w.task and time.monotonic()<deadline:app.processEvents();time.sleep(.002)
     assert w.reshape_session is None and not w.view.reshape_items and not w.view.reshape_points
-    assert w.project['labels']==original and shape(w.draft['geometry']).area==124
-    item=w.view.overlay_records['__draft'];assert item.geometry_value is w.draft['geometry']
-    w.redraw();assert w.view.overlay_records['__draft'] is item
-    w.confirm();assert shape(w.project['labels'][0]['geometry']).area==124
+    assert w.project['labels']!=original and not w.draft
+    assert shape(w.project['labels'][0]['geometry']).area==124
+    item=w.view.overlay_records['target'];w.redraw();assert w.view.overlay_records['target'] is item
 
 
 def test_service_rejects_manual_model_requests_before_loading():
@@ -192,8 +192,8 @@ def test_mouse_drawing_backspace_preview_and_save(workbench):
     original=copy.deepcopy(w.project['labels']);QTest.mouseClick(w.view.viewport(),Qt.MouseButton.RightButton,pos=p)
     deadline=time.monotonic()+4
     while w.task and time.monotonic()<deadline:app.processEvents();time.sleep(.002)
-    assert w.reshape_session is None and not w.view.reshape_items and w.project['labels']==original
-    assert w.confirm_button.isEnabled();w.confirm_button.click()
+    assert w.reshape_session is None and not w.view.reshape_items and w.project['labels']!=original
+    assert not w.confirm_button.isEnabled()
     assert w.project['labels'][0]['editing_state']=='manual'
 
 

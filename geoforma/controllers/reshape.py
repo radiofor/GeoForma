@@ -1,4 +1,4 @@
-"""One-label human raster editing and its persisted history transaction."""
+"""Human raster editing and its persisted history transaction."""
 import copy
 from shapely.geometry import shape,Point,LineString
 from shapely.ops import nearest_points
@@ -135,7 +135,7 @@ class ReshapeWorkflow:
         targets.sort(key=lambda item:item[0]!='draft')
         if not targets:
             session['error']='重塑线未穿过标注边界，请调整编辑线。';self.update_controls();return
-        if self.draft.get('reshape_batch') or self.draft_modified() and not any(t=='draft' for t,_ in targets):
+        if self.draft.get('reshape_batch'):
             session['error']=ui_text('reshape.finish_draft');self.update_controls();return
         image=image_snapshot(self.image);stroke=copy.deepcopy(session['stroke']);alternate=session['alternate']
         single=self.mode_index==0 and self.single_polygon.isChecked();context=self.annotation_context()
@@ -160,15 +160,7 @@ class ReshapeWorkflow:
         def completed():
             if self.closing or result_task[0] and result_task[0].cancel_event.is_set():return
             if self.reshape_session is not session or not result_holder:return
-            self.prompt_undo.append(self.geometry_snapshot());self.prompt_redo=[]
-            drafts=[stage_manual_edit(self.draft if target=='draft' else label_draft(label,self.classes.currentData()),result)
-                    for (target,label),result in zip(targets,result_holder)]
-            self.draft=dict(drafts[0])
-            if len(drafts)>1:self.draft['reshape_batch']=drafts
-            if self.draft.get('class_id') is not None:
-                self.classes.blockSignals(True);self.classes.setCurrentIndex(self.classes.findData(self.draft['class_id']));self.classes.blockSignals(False)
-            self.leave_reshape();self.refresh_labels();self.mark_dirty();self.autosave()
-            self.statusBar().showMessage(f'{len(drafts)} 个轮廓已更新，按回车保存。',4000)
+            self.apply_reshape_results(session,targets,result_holder)
         self.run(ui_text('reshape.processing'),work,done,kind='reshape',on_error=failed,on_finished=completed)
 
     def commit_reshape(self):
@@ -176,16 +168,44 @@ class ReshapeWorkflow:
         if not session or self.foreground_task_active() or not session['preview']:return
         current=self.reshape_current(session)
         if not current or self.annotation_context()!=session['context'] or current['geometry']!=session['label']['geometry']:return
-        if session.get('target')!='draft':
-            # Existing labels also remain unchanged until the normal Save Label action.
-            self.draft=label_draft(current,self.classes.currentData())
-            if current.get('class_id') is not None:
-                self.classes.blockSignals(True);self.classes.setCurrentIndex(self.classes.findData(current['class_id']));self.classes.blockSignals(False)
-            self.prompt_undo=[];self.prompt_redo=[]
-        self.prompt_undo.append(self.geometry_snapshot());self.prompt_redo=[]
-        self.draft=stage_manual_edit(self.draft,session['preview'])
+        self.apply_reshape_results(session,[(session['target'],current)],[session['preview']])
+
+    def apply_reshape_results(self,session,targets,results):
+        """Commit saved targets together while preserving any unrelated draft."""
+        from ..label_conflicts import resolve
+        from ..label_parts import split_label
+        if len(targets)!=len(results):raise ValueError('重塑结果数量不一致。')
+        originals=self.current_labels();by_id={label['id']:label for label in originals}
+        replacements={};history=[];updated_draft=None
+        try:
+            for (target,label),result in zip(targets,results):
+                if target=='draft':
+                    if self.draft.get('geometry')!=label.get('geometry'):raise ValueError('未保存轮廓已变化，请重新重塑。')
+                    updated_draft=stage_manual_edit(self.draft,result);continue
+                current=by_id.get(label['id'])
+                if not current or current['geometry']!=label['geometry']:raise ValueError('标签已变化，请重新重塑。')
+                staged=stage_manual_edit(label_draft(current,self.classes.currentData()),result)
+                replacement=copy.deepcopy(current)
+                for key in ('_bounds','_render_path','_source_geometry','_source_path','raw_geometry','source_geometry','smoothing_applied'):
+                    replacement.pop(key,None)
+                replacement.update(geometry=staged['geometry'],editing_state='manual',manual_edits=staged['manual_edits'],edge=False)
+                blockers=[item for item in originals if item['id']!=current['id']]
+                blockers.extend(part for parts in replacements.values() for part in parts)
+                geometry=resolve(replacement,blockers,'clip')['geometry']
+                if geometry is None:raise ValueError('重塑后目标为空，请调整编辑线。')
+                replacement['geometry']=geometry;parts=split_label(replacement)
+                replacements[current['id']]=parts
+                index=next(i for i,item in enumerate(self.project['labels']) if item['id']==current['id'])
+                history.append((current['id'],copy.deepcopy(current),index))
+                history.extend((part['id'],None,index+i) for i,part in enumerate(parts[1:],1))
+        except Exception as error:
+            session['preview']=None;session['error']=str(error);self.update_controls();return
+        self.record_label_operation(history)
+        if replacements:
+            self.project['labels']=[part for item in self.project['labels'] for part in replacements.get(item['id'],[item])]
+        if updated_draft is not None:self.draft=updated_draft
         self.leave_reshape();self.refresh_labels();self.mark_dirty();self.autosave()
-        self.statusBar().showMessage(ui_text('reshape.draft_changed'),3000)
+        self.statusBar().showMessage('轮廓已更新。' if updated_draft is None else '已更新轮廓；未保存的标注仍需确认。',4000)
 
     def cancel_reshape(self):
         if self.reshape_session is None and not self.view.reshape_picking:return

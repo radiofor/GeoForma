@@ -66,7 +66,7 @@ class ExportWorkflow:
         suffix=self.export_kind.currentData()
         item=next((entry for entry in VECTOR_FORMATS if entry[1]==suffix),None)
         if item is None:return
-        name=Path(self.image['path']).stem+'_labels'+suffix
+        name=Path(self.image['path']).stem+'_labels'
         path,_=QFileDialog.getSaveFileName(self,ui_text('exports.export.003'),str((self.project_path.parent if self.project_path else Path.cwd())/name),item[2])
         if not path:return
         target=export_path(path,suffix)
