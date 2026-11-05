@@ -103,7 +103,14 @@ class ReferenceWorkflow:
         self.reference_switch_holder.set_references(refs,self.display_reference,enabled)
         self.reference_buttons=self.reference_switch_holder.buttons
 
-    def resize_reference_strip(self,limit):self.reference_switch_holder.set_width_limit(limit)
+    def reorder_reference_buttons(self,order):
+        if interaction_locked(self) or not self.image:return
+        visible=[record['group'].casefold() for record in self.current_references()]
+        if len(order)!=len(visible) or set(order)!=set(visible):return
+        from ..reference_catalog import reorder_reference_groups
+        records=self.project.get('references',[]);updated=reorder_reference_groups(records,order)
+        if updated is records:return
+        self.project['references']=updated;self.sync_reference_buttons();self.mark_dirty()
 
     def switch_reference(self,reference):
         if interaction_locked(self):return

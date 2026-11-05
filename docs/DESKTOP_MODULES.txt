@@ -17,13 +17,15 @@ workspace.tool/tools 保存并恢复工具选择。
 geoforma/source_catalog.py：计算影像和参考的统一来源、路径迁移与输出保护。
 geoforma/raster_snapshot.py：为推理、重塑和导出生成隔离的影像快照，排除界面编辑会话。
 geoforma/label_index.py：缓存已确认标签的几何和空间索引，只对草稿附近的轮廓执行裁剪。
-geoforma/reference_catalog.py：参考身份、稳定合并及按主影像名称建立的只读索引。
-geoforma/ui/reference_switcher.py：参考按钮复用、滚动、固定尺寸与展开动画；不负责栅格读取。
+geoforma/reference_catalog.py：参考身份、稳定合并、类型顺序及按主影像名称建立的只读索引。
+geoforma/ui/reference_switcher.py：参考按钮复用、拖动排序及左右导航；不负责栅格读取或项目保存。
+geoforma/ui/image_toolbar.py：根据工具栏实际宽度分配参考按钮空间，不覆盖其他工具。
 geoforma/contracts.py：模型输入、像元窗口和主影像/参考显示分配上限。
 geoforma/ui/text.py：集中管理界面标签、说明和消息模板；业务错误仍在业务模块中。
 geoforma/ui/modal.py：临时对话框统一释放，后台任务仍引用对话框时延迟至完成后释放。
 geoforma/application_info.py：本地说明文档目录与依赖元数据，不导入模型；ui/information.py：离线文档和可复制的版本表。
 geoforma/release_artifacts.py：可重复的发布文件清单与保留目录结构的许可证收集。
+tools/build_release.py：冻结源码与关键配置生成摘要；复用冻结程序前核对摘要，源码变化时强制重新冻结。
 geoforma/runtime_profile.py：已验证的源码运行层及 Windows 发布依赖版本门槛。
 geoforma/network.py：使用维护中的 CA 证书进行 HTTPS 下载，拒绝降级至 HTTP。
 geoforma/ui/label_table.py：LabelRow 数据契约、表格增量同步与选择显示。

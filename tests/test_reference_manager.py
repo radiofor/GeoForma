@@ -155,4 +155,6 @@ def test_source_controls_stay_visible_and_eye_precedes_main_at_all_sizes(workben
         assert w.reference_manage_button.mapTo(w,QPoint()).y()==w.import_reference_button.mapTo(w,QPoint()).y()
         assert w.source_controls.parentWidget().rect().contains(w.source_controls.geometry())
     w.project['references']=[];w.sync_reference_buttons();QTest.qWait(190);app.processEvents()
-    assert w.main_image_button.isVisible() and w.main_image_button.isChecked() and not w.reference_switch_holder.isVisible()
+    holder=w.reference_switch_holder
+    assert w.main_image_button.isVisible() and w.main_image_button.isChecked() and holder.isVisible()
+    assert holder.left.isVisible() and holder.right.isVisible() and not holder.left.isEnabled() and not holder.right.isEnabled()

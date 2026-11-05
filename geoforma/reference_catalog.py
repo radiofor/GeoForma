@@ -26,6 +26,18 @@ def equivalent_reference(record,choices):
     return next((choice for choice in choices if choice is record or choice==record),None)
 
 
+def reorder_reference_groups(records,visible_order):
+    """Reorder visible types while keeping other types in their existing slots."""
+    groups=list(dict.fromkeys(record['group'].casefold() for record in records))
+    wanted=list(visible_order);wanted_set=set(wanted)
+    current=[group for group in groups if group in wanted_set]
+    if len(wanted)!=len(wanted_set) or set(current)!=wanted_set or current==wanted:return records
+    replacement=iter(wanted);order=[next(replacement) if group in wanted_set else group for group in groups]
+    grouped={group:[] for group in groups}
+    for record in records:grouped[record['group'].casefold()].append(record)
+    return [record for group in order for record in grouped[group]]
+
+
 class ReferenceLookup:
     def __init__(self):self.source=None;self.length=-1;self.by_stem={}
 

@@ -39,7 +39,9 @@ def main():
     for number in (2,3):
         other=data/f'demo_{number}.tif';shutil.copy2(source,other)
         record=inspect_source(other);record['review_complete']=number==2;images.append(record)
-    w.project['images']=images;w.refresh_images();w.images.setCurrentRow(0)
+    w.project['images']=images
+    w.project['references']=[dict(image,group=name,fingerprint='synthetic-'+name) for name in ('NDWI','VV-DESC','VV-ASC')]
+    w.refresh_images();w.images.setCurrentRow(0)
     w.project_path=data/'demo.gfm';w.refresh_project_title();w.update_controls();w.resize(1440,960);w.show()
     def settle():
         deadline=time.monotonic()+20

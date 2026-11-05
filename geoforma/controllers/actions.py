@@ -67,6 +67,7 @@ class WorkbenchActions:
         from ..ui.reference_switcher import ReferenceSwitcher
         self.reference_switch_holder=ReferenceSwitcher();self.reference_switches=self.reference_switch_holder.buttons_widget
         self.reference_switch_holder.selected.connect(self.switch_reference)
+        self.reference_switch_holder.reordered.connect(self.reorder_reference_buttons)
         self.source_controls.setStyleSheet('QToolButton{padding:4px 8px;border:1px solid #d5e3e7;border-radius:4px;background:white;color:#30525c;} QToolButton:checked{background:#def3ef;border-color:#92d4cd;color:#087f88;}')
         source_row.addWidget(self.reference_switch_holder)
         self.settings_button=QToolButton();self.settings_button.setFixedSize(30,30);self.settings_button.setIcon(icon('settings'))
@@ -85,7 +86,7 @@ class WorkbenchActions:
         source_row.addWidget(self.settings_button)
         # Keep image operations above the image instead of spanning both sidebars.
         central=QWidget();central.setMinimumWidth(400);layout=QVBoxLayout(central);layout.setContentsMargins(0,0,0,0);layout.setSpacing(0)
-        top=ImageToolbarRow(toolbar,self.source_controls,self.resize_reference_strip)
+        top=ImageToolbarRow(toolbar,self.source_controls,self.reference_switch_holder)
         layout.addWidget(top);layout.addWidget(self.view,1);self.setCentralWidget(central)
 
 

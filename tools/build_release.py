@@ -7,6 +7,31 @@ def sha(path):
     with Path(path).open('rb') as stream:return hashlib.file_digest(stream,'sha256').hexdigest()
 
 
+def freeze_source_fingerprint(root,optional,channel):
+    """Identify the local application inputs captured inside a frozen build."""
+    root=Path(root);files=[root/'main.py',root/'environment/_geoforma_runtime.py',
+        root/'packaging/geoforma.spec',root/'packaging/runtime_hook.py']
+    files.extend(root/'assets'/name for name in ('geoforma_map_pen.ico','chevron_down.svg','spin_up.svg','spin_down.svg'))
+    files.extend(path for path in (root/'geoforma').rglob('*') if path.is_file() and path.suffix in ('.py','.json'))
+    runtime=root/'environment/sam3-runtime'
+    if runtime.is_dir():
+        files.extend(path for path in runtime.rglob('*') if path.is_file() and '__pycache__' not in path.parts and path.suffix!='.pyc')
+    if optional:files.append(root/'packaging/optional-runtime.json')
+    if channel=='store':files.append(root/'packaging/store-profile.json')
+    result=hashlib.sha256();result.update(('optional='+str(bool(optional))+'\nchannel='+channel+'\n').encode())
+    for path in sorted(files,key=lambda value:value.relative_to(root).as_posix()):
+        name=path.relative_to(root).as_posix().encode();size=path.stat().st_size
+        result.update(len(name).to_bytes(8,'big'));result.update(name)
+        result.update(size.to_bytes(8,'big'))
+        with path.open('rb') as stream:result.update(hashlib.file_digest(stream,'sha256').digest())
+    return result.hexdigest()
+
+
+def require_matching_frozen_source(manifest,expected):
+    if manifest.get('source_fingerprint')!=expected:
+        raise ValueError('源码或冻结配置已变化，请完整重新构建程序，不能复用旧的冻结文件。')
+
+
 def offline_checkpoint(override=None):
     from geoforma.model_preferences import recommended_model
     from geoforma.model_catalog import model_spec
@@ -47,14 +72,20 @@ def main():
     if args.optional_runtime:
         os.environ['GEOFORMA_OPTIONAL_RUNTIME']='1'
     else:os.environ['GEOFORMA_OPTIONAL_RUNTIME']='0'
+    channel=os.environ.get('GEOFORMA_BUILD_CHANNEL','')
+    source_fingerprint=freeze_source_fingerprint(ROOT,args.optional_runtime,channel)
     target=(args.output_dir or ROOT/'release'/VERSION).resolve();target.mkdir(parents=True,exist_ok=True)
-    if not args.skip_freeze:subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--distpath',str(target/'portable'),'--workpath',str(args.work_dir or ROOT/('build/native-'+VERSION)),str(ROOT/'packaging/geoforma.spec')],cwd=ROOT,check=True)
+    if not args.skip_freeze:
+        subprocess.run([sys.executable,'-m','PyInstaller','--noconfirm','--distpath',str(target/'portable'),'--workpath',str(args.work_dir or ROOT/('build/native-'+VERSION)),str(ROOT/'packaging/geoforma.spec')],cwd=ROOT,check=True)
+        if freeze_source_fingerprint(ROOT,args.optional_runtime,channel)!=source_fingerprint:
+            raise ValueError('冻结期间源码或配置发生变化，请重新构建。')
     else:
         if not (target/'portable/GeoForma/GeoForma.exe').exists():raise FileNotFoundError('Build the EXE before refreshing its release')
         from geoforma.release_artifacts import verify_release_inventory
         from geoforma.atomic_io import read_json
         previous=read_json(target/'portable/GeoForma/release-manifest.json')
         require_native_release(target/'portable/GeoForma',previous,VERSION)
+        require_matching_frozen_source(previous,source_fingerprint)
         if bool(previous.get('default_model',{}).get('optional')) != bool(args.optional_runtime or args.bundled_runtime_no_weights):
             raise ValueError('不能在既有程序上变更权重打包模式，请完整构建。')
         verify_release_inventory(target/'portable/GeoForma',previous['files'])
@@ -88,7 +119,7 @@ def main():
     if not sam3_license.is_file():raise FileNotFoundError('缺少 SAM 3 官方许可协议，无法制作发布包。')
     (licenses/'SAM-3').mkdir(parents=True,exist_ok=True);shutil.copy2(sam3_license,licenses/'SAM-3'/'LICENSE')
     (licenses/'packages.json').write_text(json.dumps(packages,indent=2),encoding='utf-8')
-    manifest={'version':VERSION,'python':sys.version,'default_model':{'id':spec['id'],'file':'models/'+spec['file'],'sha256':spec['sha256']},'execution':'native','files':[]}
+    manifest={'version':VERSION,'python':sys.version,'source_fingerprint':source_fingerprint,'default_model':{'id':spec['id'],'file':'models/'+spec['file'],'sha256':spec['sha256']},'execution':'native','files':[]}
     manifest['files']=release_inventory(bundle)
     manifest['runtime_mode']='optional' if args.optional_runtime else 'bundled'
     if args.optional_runtime or args.bundled_runtime_no_weights:manifest['default_model']['optional']=True
