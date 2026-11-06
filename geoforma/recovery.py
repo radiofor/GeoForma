@@ -39,15 +39,8 @@ def recovery_target(settings,data_root,legacy_root=None):
     if legacy_root is not None and Path(legacy_root)!=Path(data_root):roots.append(Path(legacy_root))
     untitled=[root/'recovery'/RECOVERY_NAME for root in roots]
     remembered=settings.value('recovery/last_work','')
-    if remembered:
-        base=Path(remembered)
-        from .cache_recovery import remap_migrated_path
-        base=remap_migrated_path(base,'recoveries',preserve_existing=False) or base
-        if base not in untitled:return base if stamp(base) is not None else None
-    # Compatibility with work saved before the explicit recovery button.
-    bases=list(untitled)
-    last=settings.value('last_project','')
-    if last:bases.append(Path(last))
-    available=[(stamp(base,base in untitled),base) for base in bases]
-    available=[entry for entry in available if entry[0] is not None]
-    return max(available,key=lambda entry:entry[0])[1] if available else None
+    if not remembered:return None
+    base=Path(remembered)
+    from .cache_recovery import remap_migrated_path
+    base=remap_migrated_path(base,'recoveries',preserve_existing=False) or base
+    return base if stamp(base,base in untitled) is not None else None

@@ -49,7 +49,7 @@ class ProjectLoadingWorkflow:
         return changed
 
     def request_project_open(self,path,recover_latest=False):
-        if self.task or self.reshape_session is not None or self.loading_task or self.project_transition or self.closing:return False
+        if self.task or self.loading_task or self.project_transition or self.closing:return False
         from ..resource_migration import pending_migration
         try:pending=bool(pending_migration())
         except (OSError,ValueError,RuntimeError):pending=True
@@ -170,7 +170,8 @@ class ProjectLoadingWorkflow:
                 if Path(path).resolve() in {base.resolve() for base in untitled}:self.project_path=None
                 state=self.project.get('workspace',{})
                 self.tool_modes=dict(state.get('tools',{}))
-                self.auto_apply.setChecked(state.get('auto_apply',True));self.single_polygon.setChecked(state.get('single_polygon',False));self.fill_holes.setChecked(state.get('fill_holes',False))
+                from ..domain import DEFAULT_FILL_HOLES
+                self.auto_apply.setChecked(state.get('auto_apply',True));self.single_polygon.setChecked(state.get('single_polygon',False));self.fill_holes.setChecked(state.get('fill_holes',DEFAULT_FILL_HOLES))
                 raw_view=state.get('raw_view',False);self.raw_view_action.setChecked(True);self.refresh_classes()
                 session={}
                 if self.image:
@@ -187,7 +188,6 @@ class ProjectLoadingWorkflow:
                 if self.image:
                     if loaded.navigation:self.view.restore_navigation(loaded.navigation)
                     elif loaded.view_window:self.view.fitInView(QRectF(*loaded.view_window),Qt.AspectRatioMode.KeepAspectRatio)
-                    self.view.update_scrollbar_visibility()
                 self.view.set_overlay_visibility(True)
                 self.label_index=loaded.index;self.label_index_key=self.label_index_signature()
                 self.label_indexes.put(self.annotation_context(),self.label_index_key,self.label_index)
@@ -217,7 +217,7 @@ class ProjectLoadingWorkflow:
                         if tool=='pan':self.restore_tool('pan')
                         self.update_controls()
                 self.raw_view_action.setChecked(not raw_view);self.view.set_overlay_visibility(not raw_view);self.update_controls()
-                self.settings.setValue('last_project',str(path));self.settings.setValue('recovery/last_work',str(path))
+                self.settings.setValue('recovery/last_work',str(path))
                 self.log_message(ui_text('projects.open_project.005'));self.dirty=False
                 if getattr(loaded,'reconciled_caches',0) or getattr(loaded,'sources_changed',False):self.mark_dirty()
                 self.raster_list_sizer.settle()

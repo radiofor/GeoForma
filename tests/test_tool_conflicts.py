@@ -1,7 +1,6 @@
-import copy
+import copy,time
 import pytest
-from test_reshape import workbench,raster_image
-from test_reshape_targets import preview
+from test_reshape import workbench,raster_image,OUT
 
 
 def test_pan_suspends_stroke_and_reshape_resumes_without_losing_points(workbench):
@@ -27,22 +26,26 @@ def test_explicit_edit_tool_switch_cancels_only_construction_line(workbench,tool
     assert w.images.isEnabled() and w.import_action.isEnabled()
 
 
-def test_target_changes_are_locked_but_save_and_navigation_remain_available(workbench):
+def test_target_controls_and_navigation_remain_available_during_reshape(workbench):
     w,app,_=workbench;w.begin_reshape()
-    for control in (w.images,w.model_button,w.import_button,w.import_action,w.confirm_button):
-        assert not control.isEnabled()
+    for control in (w.images,w.model_button,w.import_button,w.import_action):
+        assert control.isEnabled()
+    assert not w.confirm_button.isEnabled()
     assert w.project_actions['save'].isEnabled() and not w.project_actions['recover'].isEnabled()
     assert w.labels_table.isEnabled() and w.fit_action.isEnabled()
+    w.add_reshape_point(*OUT[0]);assert w.reshape_session['stroke']
+    w.set_tool('select');assert w.reshape_session is None and w.view.mode=='select'
 
 
-def test_manual_geometry_rejects_prompt_shortcuts_without_changing_active_tool(workbench):
-    w,app,_=workbench;w.edit_selected(locate=False);w.begin_reshape();preview(w,app);w.begin_reshape()
-    for mode in ('positive','negative','box','select_points'):
-        assert not w.mode_actions[mode].isEnabled()
-        w.set_tool(mode)
-        assert w.view.mode=='reshape' and w.mode_actions['reshape'].isChecked()
-    w.set_tool('select')
-    assert w.view.mode=='select' and w.reshape_session is None
+def test_reshaped_saved_label_allows_switching_to_prompt_tools(workbench):
+    w,app,_=workbench;w.begin_reshape();w.reshape_session['stroke']=copy.deepcopy(OUT);w.finish_reshape()
+    deadline=time.monotonic()+8
+    while w.task and time.monotonic()<deadline:app.processEvents();time.sleep(.002)
+    assert w.task is None and w.reshape_session is None
+    w.begin_reshape(auto=True)
+    assert w.mode_actions['positive'].isEnabled()
+    w.set_tool('positive')
+    assert w.view.mode=='positive' and w.reshape_session is None
 
 
 def test_busy_calculation_allows_navigation_but_rejects_editing(workbench):

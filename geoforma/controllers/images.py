@@ -3,7 +3,7 @@ from __future__ import annotations
 from ..ui.text import ui_text
 import copy
 from pathlib import Path
-from PySide6.QtCore import Qt, QRectF,QSignalBlocker
+from PySide6.QtCore import Qt, QRectF,QSignalBlocker,QTimer
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QInputDialog
 from ..raster import inspect_source, make_recipe
 from ..dialogs import BandsDialog
@@ -13,7 +13,7 @@ from ..ui.modal import dialog_result
 
 class ImageWorkflow:
     def import_dialog(self):
-        if not can_start_operation(self) or self.reshape_session is not None:return
+        if not can_start_operation(self):return
         directory=str(self.settings.value('last_import_directory','') or '')
         if not directory or not Path(directory).is_dir():directory=''
         self.import_button.setDown(True);self.import_button.repaint()
@@ -24,7 +24,7 @@ class ImageWorkflow:
             self.import_paths(files)
 
     def import_paths(self,paths):
-        if not paths or not can_start_operation(self) or self.reshape_session is not None:return
+        if not paths or not can_start_operation(self):return
         paths=tuple(paths);existing=tuple(v['path'] for v in self.project['images'])
         def work(task):
             from ..image_list import plan_import
@@ -69,7 +69,7 @@ class ImageWorkflow:
 
     def toggle_image_review(self,identifier):
         from ..operation_state import interaction_locked,can_browse
-        if interaction_locked(self) or self.reshape_session is not None or not can_browse(self):return
+        if interaction_locked(self) or not can_browse(self):return
         index=next((i for i,image in enumerate(self.project['images']) if image['id']==identifier),None)
         if index is None:return
         image=self.project['images'][index];complete=not image.get('review_complete',False)
@@ -81,15 +81,85 @@ class ImageWorkflow:
 
     def change_image(self,row):
         from ..operation_state import interaction_locked,can_browse
-        if interaction_locked(self) or self.reshape_session is not None or not can_browse(self):
+        if interaction_locked(self) or not can_browse(self):
             current=next((i for i,image in enumerate(self.project['images']) if image is self.image),-1)
             with QSignalBlocker(self.images):self.images.setCurrentRow(current)
             return
+        if row<0 or row>=len(self.project['images']):return
+        target=self.project['images'][row]
+        if target is self.image:
+            self.cancel_image_switch();return
+        # Keep the current image and its selection coherent while a new
+        # overview is read. Cached overviews switch immediately.
+        if self.image and self.view.layers.base_item is not None and target.get('display_recipe'):
+            window=[0,0,target['width'],target['height']]
+            if not self.raster_renderer.has_cached(target,window,1400):
+                self.prepare_image_switch(row,target,window);return
+        self.cancel_image_switch()
         self._activate_image(row)
+
+    def cancel_image_switch(self):
+        self._image_switch_serial=getattr(self,'_image_switch_serial',0)+1
+        task=getattr(self,'_image_switch_task',None)
+        if task is not None:task.cancel()
+
+    def prepare_image_switch(self,row,target,window):
+        from ..tasks import Task
+        from ..rendering.raster_queue import display_snapshot
+        self.cancel_image_switch();serial=self._image_switch_serial
+        current=self.image;epoch=self.project_epoch;revision=self.state.interaction_revision;reshape=self.reshape_session
+        selection=(frozenset(self.selected_ids),frozenset(self.selected_points),self.annotation_mode())
+        navigation=self.view.capture_navigation()
+        current_row=next((i for i,image in enumerate(self.project['images']) if image is current),-1)
+        with QSignalBlocker(self.images):self.images.setCurrentRow(current_row)
+        snapshot=display_snapshot(target)
+        def work(task):
+            task.check();value=self.raster_renderer.reader(snapshot,window,snapshot['display_recipe'],1400);task.check();return value
+        task=Task(work);self._image_switch_task=task
+        def valid():
+            from ..operation_state import interaction_locked,can_browse
+            return (not self.closing and serial==self._image_switch_serial and epoch==self.project_epoch and
+                    revision==self.state.interaction_revision and self.image is current and row<len(self.project['images']) and
+                    self.project['images'][row] is target and not interaction_locked(self) and
+                    selection==(frozenset(self.selected_ids),frozenset(self.selected_points),self.annotation_mode()) and
+                    navigation==self.view.capture_navigation() and self.reshape_session is reshape and can_browse(self))
+        def retry_changed_target():
+            if display_snapshot(target)==snapshot:return False
+            if target.get('display_recipe'):
+                self.prepare_image_switch(row,target,[0,0,target['width'],target['height']])
+            else:
+                self.cancel_image_switch()
+                with QSignalBlocker(self.images):self.images.setCurrentRow(row)
+                self._activate_image(row)
+            return True
+        def ready(value):
+            if not valid():return
+            if retry_changed_target():return
+            self.raster_renderer.prime(snapshot,window,1400,value)
+            with QSignalBlocker(self.images):self.images.setCurrentRow(row)
+            self._activate_image(row)
+        def failed(message):
+            if valid() and not task.cancel_event.is_set():
+                if retry_changed_target():return
+                from ..error_messages import user_message
+                self.log_message(message);self.statusBar().showMessage('影像读取失败 · '+user_message(message),7000)
+        def finished():
+            if getattr(self,'_image_switch_task',None) is task:self._image_switch_task=None
+            if self.closing:QTimer.singleShot(0,self.close)
+        task.signals.result.connect(ready);task.signals.error.connect(failed);task.signals.finished.connect(finished)
+        self.render_pool.start(task,-1)
 
     def _activate_image(self,row):
         if row<0 or row>=len(self.project['images']):return
         if self.image is self.project['images'][row]:return
+        self.interrupt_reshape()
+        target=self.project['images'][row]
+        window=[0,0,target['width'],target['height']]
+        previous_rows=self.label_presenter.rows
+        self.label_presenter.transition.capture()
+        transition=bool(self.image and target.get('display_recipe') and self.raster_renderer.has_cached(target,window,1400))
+        if transition:self.view.frame_transition.capture()
+        else:self.view.frame_transition.cancel()
         self.invalidate_preview()
         self.auto_apply_timer.stop()
         if self.label_index_task:self.label_index_task.cancel()
@@ -98,10 +168,19 @@ class ImageWorkflow:
         self.image=self.project['images'][row];session=self.load_image_session()
         if 'class_id' in self.draft:
             self.classes.blockSignals(True);self.classes.setCurrentIndex(self.classes.findData(self.draft['class_id']));self.classes.blockSignals(False)
-        self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation);self.view.set_image(self.image['width'],self.image['height'])
+        self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation);self.view.switch_image(self.image['width'],self.image['height'])
         if session.get('navigation'):self.view.restore_navigation(session['navigation'])
         elif session.get('view'):self.view.fitInView(QRectF(*session['view']),Qt.AspectRatioMode.KeepAspectRatio)
-        self.refresh_info();self.update_draft_info();self.refresh_labels();self.request_render(True);self.mark_dirty()
+        # Start I/O before building the table and annotation layer, so those
+        # GUI updates overlap the overview read. Reset the reference context
+        # first: references always belong to the newly activated image.
+        self.sync_reference_buttons()
+        self.transition_detail=(self.render_generation,self.raster_renderer.revision) if transition else None
+        self.request_render(True)
+        self.refresh_info();self.update_draft_info();self.refresh_labels();self.mark_dirty()
+        self.label_presenter.transition.reveal(previous_rows!=self.label_presenter.rows)
+        if transition and self.view.layers.base_item is not None:self.view.frame_transition.reveal()
+        else:self.view.frame_transition.cancel()
         if self.auto_prepare:self.queue_preparation()
 
     def store_image_session(self):

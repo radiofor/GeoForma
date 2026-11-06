@@ -40,6 +40,24 @@ def test_preparation_is_side_effect_free_and_contains_first_frame_and_paths(save
     assert source==before and all('_render_path' not in label for label in loaded.project['labels'])
 
 
+@pytest.mark.parametrize('with_hole',[False,True])
+def test_loading_only_prepares_fill_when_a_contour_has_holes(saved_project,monkeypatch,with_hole):
+    from geoforma import label_presentation
+    path,source=saved_project
+    source['smoothing']['individual']['enabled']=False
+    source['workspace']['fill_holes']=True
+    if with_hole:
+        source['labels'][0]['geometry']=mapping(box(20,20,40,40).difference(box(25,25,30,30)))
+    calls=[];original=label_presentation.presentation_batch
+    def record(*args,**kwargs):
+        calls.append(True)
+        return original(*args,**kwargs)
+    monkeypatch.setattr(label_presentation,'presentation_batch',record)
+    loaded=prepare_project(path,(800,600),read_frame=False,project=source)
+    assert bool(calls) is with_hole
+    assert (loaded.smoothing is not None) is with_hole
+
+
 def test_open_gfm_restores_image_and_labels(workbench,saved_project,tmp_path):
     w,app,wait,errors=workbench;old,_=saved_project;path=tmp_path/'loaded.gfm'
     save_project(load_project(old),path)

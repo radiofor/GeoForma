@@ -54,12 +54,11 @@ def test_edit_existing_multicomponent_result_keeps_primary_id(workbench):
 
 
 def test_batch_save_splits_all_targets_and_undoes_as_one(workbench):
-    from geoforma.editing_state import label_draft
     w,app,_=workbench;w.single_polygon.setChecked(False)
     first=w.project['labels'][0];second=dict(first,id='second',geometry=mapping(box(70,70,80,80)))
     w.project['labels'].append(second);before=copy.deepcopy(w.project['labels'])
-    a=label_draft(first,1);a.update(geometry=disconnected(),editing_state='manual')
-    b=label_draft(second,1);b.update(geometry=mapping(MultiPolygon([box(70,70,75,75),box(80,80,85,85)])),editing_state='manual')
+    a={'base_id':first['id'],'class_id':1,'geometry':disconnected(),'editing_state':'manual'}
+    b={'base_id':second['id'],'class_id':1,'geometry':mapping(MultiPolygon([box(70,70,75,75),box(80,80,85,85)])),'editing_state':'manual'}
     w.draft=dict(a,reshape_batch=[a,b]);w.refresh_labels();w.confirm()
     assert len(w.project['labels'])==4 and w.labels_table.rowCount()==4
     assert all(l['geometry']['type']=='Polygon' for l in w.project['labels'])

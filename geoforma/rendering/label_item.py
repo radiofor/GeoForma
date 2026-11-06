@@ -14,7 +14,9 @@ def outline_metrics(scale, screen_extent, selected=False):
     zoom = max(-3.0, min(3.0, log2(max(scale, 1e-9))))
     width = 1.7 + zoom * .15 + (.6 if selected else 0)
     dash = min(7.0 + zoom, max(2.5, screen_extent / 10.0))
-    return width, dash, dash * .65
+    # Keep a visible gap even when antialiasing blends the endpoints of a
+    # short dash. Spacing remains the same for selected and unselected labels.
+    return width, dash, max(2.5, dash * .65)
 
 
 class LabelItem(QGraphicsPathItem):
@@ -33,6 +35,9 @@ class LabelItem(QGraphicsPathItem):
         painter.drawPath(self.path())
         outline = QPen(self.pen().color(), width, Qt.PenStyle.DashLine)
         outline.setCosmetic(True)
+        # The default square cap extends each dash by half the pen width on
+        # both ends and closes the short gaps on small polygons.
+        outline.setCapStyle(Qt.PenCapStyle.FlatCap)
         # Qt expresses dash entries in pen-width units, not screen pixels.
         outline.setDashPattern([dash / width, gap / width])
         painter.setPen(outline)

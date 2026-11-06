@@ -8,12 +8,11 @@ from ..status_bar import WorkbenchStatusBar
 from ..background_activity import BackgroundActivity
 from ..task_progress import TaskProgressPresentation
 from ..progress_bar import TaskProgressBar
-from ..layouts import reserve_space
 
 
 def bottom(w):
     center=Qt.AlignmentFlag.AlignVCenter
-    w.task_text=StatusDetail();w.task_text.setFixedHeight(26);w.task_text.setAlignment(Qt.AlignmentFlag.AlignLeft|center)
+    w.task_text=StatusDetail(wrap=True);w.task_text.setFixedHeight(26);w.task_text.setAlignment(Qt.AlignmentFlag.AlignLeft|center)
     bar=WorkbenchStatusBar(w.task_text,w);w.setStatusBar(bar);bar.setFixedHeight(42);bar.setSizeGripEnabled(False)
     bar.setStyleSheet('QStatusBar{background:#f7fafb;border-top:1px solid #dce7eb;padding:0;} QStatusBar::item{border:0;} QStatusBar QLabel{padding:0;margin:0;}')
     w.task_text.setStyleSheet('color:#496672;');bar.notice.setStyleSheet('color:#147b7e;padding:0;')
@@ -21,12 +20,12 @@ def bottom(w):
     w.state_label=StatusBadge(ui_text('control_state.update_controls.025'));w.state_label.setProperty('role','status')
     w.state_label.setFixedSize(96,26);w.state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     w.state_label.setStyleSheet('padding:0;background:transparent;border:0;')
-    w.edit_status=StatusDetail(ui_text('prompts.update_draft_info.011'))
+    w.edit_status=StatusDetail(wrap=True)
     for label in (w.edit_status,):
         label.setAlignment(Qt.AlignmentFlag.AlignCenter);label.setFixedHeight(26);label.setStyleSheet('color:#758b95;padding:0;')
-    w.context_status=w.edit_status;w.context_status.setFixedSize(170,26)
+    w.context_status=w.edit_status
     w.background_button=QToolButton();w.background_button.setFixedSize(86,26);w.background_button.setEnabled(False)
-    reserve_space(w.background_button);w.background_button.hide()
+    w.background_button.hide()
     w.background_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
     w.background_button.setStyleSheet('QToolButton{border:1px solid transparent;border-radius:5px;padding:0 8px 0 0;color:#6b8490;background:transparent;} QToolButton:enabled{color:#397887;background:#edf5f7;border-color:#dcebee;} QToolButton:hover{background:#e2f0f3;} QToolButton::menu-indicator{width:8px;subcontrol-position:right center;right:5px;}')
     menu=QMenu(w.background_button);w.background_button.setMenu(menu)
@@ -52,8 +51,7 @@ def bottom(w):
     content=QWidget();row=QHBoxLayout(content);row.setContentsMargins(14,0,14,0);row.setSpacing(12)
     row.addWidget(w.progress_panel,0,center);row.addWidget(bar.text_slot,1,center)
     row.addWidget(w.background_button,0,center)
-    row.addWidget(w.context_status,0,center)
-    bar.set_content(content)
+    bar.set_content(content,w.context_status)
     w.cursor_label=QLabel(w);w.cursor_label.hide()
     w.log=QPlainTextEdit();w.log.setReadOnly(True);w.log.setMaximumBlockCount(600)
     w.log_dock=w.dock(ui_text('imagery.left.010'),w.log,Qt.DockWidgetArea.BottomDockWidgetArea);w.log_dock.setMaximumHeight(150);w.log_dock.hide()

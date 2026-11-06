@@ -11,6 +11,7 @@ TASK_NAMES={
     'interactive':'逐个分割',
     'history':'撤销标签',
     'reshape':'重塑轮廓',
+    'manual_polygon':'生成多边形',
     'bands':'调整波段',
     'export':'导出标签',
     'project_open':'打开项目',

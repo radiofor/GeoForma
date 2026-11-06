@@ -30,8 +30,8 @@ def test_model_loading_allows_image_mode_and_label_browsing(workbench,kind):
         for control in (w.model_button,w.apply_button,w.reprepare_button,w.import_button):assert not control.isEnabled()
         assert not w.run('第二个任务',lambda task:None,lambda result:None,kind='export')
         w.set_tool('select');assert w.view.mode=='select'
-        w.select_items('labels',['saved']);assert w.selected_ids=={'saved'} and w.zoom_button.isEnabled()
-        w.zoom_button.click();assert w.draft==draft
+        w.select_items('labels',['saved']);assert w.selected_ids=={'saved'}
+        w.zoom_selected();assert w.draft==draft
         w.select_items('points',[0]);assert not w.selected_points
         w.images.setCurrentRow(1);assert w.image is images[1] and not w.draft
         assert not hasattr(w,'tabs') and w.mode_index==0
@@ -48,7 +48,10 @@ def test_other_tasks_still_block_image_and_mode_changes(workbench,kind):
     w,app,wait,errors=workbench;w.task=object();w.task_kind=kind
     try:
         w.update_controls();assert not can_browse(w)
-        assert not w.images.isEnabled() and not w.mode_actions['select'].isEnabled()
+        assert w.images.isEnabled() is (kind=='reshape')
+        assert not w.mode_actions['select'].isEnabled()
+        if kind=='reshape':
+            before=w.image;w.change_image(0);assert w.image is before
         assert not hasattr(w,'switch_annotation_mode') and w.mode_index==0
     finally:w.task=None;w.task_kind=None;w.update_controls()
 

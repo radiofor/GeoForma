@@ -122,6 +122,7 @@ def build_imagery(w):
     w.images.setMinimumHeight(RasterListSizer.minimum_height)
     w.images.setSpacing(3)
     w.images.currentRowChanged.connect(w.change_image)
+    w.images.itemClicked.connect(lambda item:w.cancel_image_switch() if w.images.row(item)==w.images.currentRow() and getattr(w,'_image_switch_task',None) is not None else None)
     layout.addWidget(w.images,1)
     w.image_info = RasterInfo()
     layout.addWidget(w.image_info)

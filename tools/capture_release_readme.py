@@ -57,7 +57,7 @@ def main():
         w.set_tool('draw_polygon')
         for x,y in list(geometry.exterior.coords)[:-1]:w.add_manual_vertex(x,y)
         w.finish_manual_polygon();w.confirm()
-    combo=w.labels_table.category_combo(1);combo.setCurrentIndex(combo.findData(2))
+    w.select_label(w.project['labels'][1]['id']);w.category_buttons.requested.emit(2)
     w.set_tool('draw_polygon')
     for x,y in list(shapes[2].exterior.coords)[:-1]:w.add_manual_vertex(x,y)
     w.finish_manual_polygon();shot('step3-label.png')
@@ -68,8 +68,7 @@ def main():
     w.begin_reshape(auto=True)
     for point in ((190,150),(185,240),(245,250),(245,200)):w.add_reshape_point(*point)
     shot('step3-reshape.png');w.cancel_reshape()
-    # Capture the actual class dropdown and multi-target editing controls.
-    w.labels_table.category_combo(1).showPopup();app.processEvents();w.labels_table.category_combo(1).hidePopup()
+    # Capture the resource dialog independently of the label selection.
     dialog=ResourceDialog(w);dialog.show();app.processEvents()
     dialog.tabs.setCurrentIndex(0);app.processEvents();assert dialog.grab().save(str(out/'step1-runtime.png'))
     assert dialog.grab().save(str(out/'resource-settings.png'))
@@ -78,7 +77,7 @@ def main():
     from geoforma.dialogs import ClassesDialog
     demo_classes=[dict(w.project['classes'][0],name='高山冰川湖泊与周边季节性积水区域（长期监测、边界复核及变化记录）'),w.project['classes'][1]]
     classes=ClassesDialog(demo_classes,w.project['next_class_id'],set(),1,w)
-    classes.resize(480,400);classes.show();classes.expand_name_button.click();app.processEvents()
+    classes.resize(480,400);classes.show();app.processEvents()
     assert classes.grab().save(str(out/'step5-classes.png'));classes.close()
     w.image=None;w.dirty=False;w.close();app.processEvents()
     (data/'screenshots.json').write_text(json.dumps({'version':VERSION,'synthetic_data':True,'inference_claimed':False,'screenshots':[p.name for p in out.glob('*.png')],'ok':True},ensure_ascii=False,indent=2),encoding='utf-8')

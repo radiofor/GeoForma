@@ -1,5 +1,6 @@
 """Compact desktop panels; application operations are supplied by MainWindow."""
 from ...ui.text import ui_text
+from ...domain import DEFAULT_FILL_HOLES
 from ...window_preferences import RIGHT_SIDEBAR_WIDTHS
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton, QAbstractItemView, QCheckBox, QLineEdit, QStackedWidget,QDoubleSpinBox
@@ -16,7 +17,6 @@ def right(w):
     build_smoothing(w)
     w.mode_settings=QStackedWidget();layout.addWidget(w.mode_settings)
     build_prompt_tools(w,w.mode_settings)
-    build_reshape(w,w.mode_settings)
     w.mode_settings.setCurrentWidget(w.prompt_group)
     build_editor(w,layout)
     build_label_list(w,layout)
@@ -25,20 +25,16 @@ def right(w):
         shortcut=QShortcut(target);shortcut.setKeys([QKeySequence('Return'),QKeySequence('Enter')])
         shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut);shortcut.setAutoRepeat(False)
         shortcut.activated.connect(w.save_label_with_enter);setattr(w,name,shortcut)
+    w.reshape_alternate_shortcut=QShortcut(QKeySequence('R'),w.view)
+    w.reshape_alternate_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+    w.reshape_alternate_shortcut.setAutoRepeat(False);w.reshape_alternate_shortcut.activated.connect(w.reshape_alternate)
+    w.reshape_cancel_shortcut=QShortcut(QKeySequence('Escape'),w)
+    w.reshape_cancel_shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+    w.reshape_cancel_shortcut.setAutoRepeat(False);w.reshape_cancel_shortcut.setEnabled(False)
+    w.reshape_cancel_shortcut.activated.connect(w.cancel_reshape)
     build_export(w,layout)
     polish_controls(widget)
-    # Each mode reserves only the space its controls need. Text changes cannot
-    # stretch the card; switching pages is the only height transition.
-    mode_heights=[((w.mode_settings.widget(index).layout().minimumSize().height()+7)//8)*8+8
-                  for index in range(w.mode_settings.count())]
-    mode_heights[w.mode_settings.indexOf(w.prompt_group)]=w.prompt_group.layout().minimumSize().height()+2
-    def fit_mode_settings(index):
-        w.mode_settings.setFixedHeight(mode_heights[index])
-        slot=w.mode_settings.widget(index).smoothing_slot
-        if w.smoothing_controls.parentWidget() is not slot:
-            slot.layout().addWidget(w.smoothing_controls);w.smoothing_controls.show()
-    w.mode_settings.currentChanged.connect(fit_mode_settings)
-    fit_mode_settings(w.mode_settings.currentIndex())
+    w.mode_settings.setFixedHeight(w.prompt_group.layout().minimumSize().height()+2)
     w.editor_scroll=scroll_panel(widget,*RIGHT_SIDEBAR_WIDTHS)
     reserve_scrollbar(w.editor_scroll)
     w.annotation_dock=w.dock(ui_text('annotation.right.003'),w.editor_scroll,Qt.DockWidgetArea.RightDockWidgetArea)
@@ -70,7 +66,8 @@ def build_prompt_tools(w,stack):
     w.prompt_counters=PromptCounters();body.addWidget(w.prompt_counters)
     options=QHBoxLayout();options.setContentsMargins(0,0,0,0)
     w.single_polygon=QCheckBox(ui_text('option.single_polygon'));w.single_polygon.setChecked(w.project.get('workspace',{}).get('single_polygon',False));w.single_polygon.setToolTip(ui_text('option.single_polygon_hint'));w.single_polygon.toggled.connect(w.single_polygon_changed);options.addWidget(w.single_polygon)
-    w.fill_holes=QCheckBox('填充洞');w.fill_holes.setChecked(w.project.get('workspace',{}).get('fill_holes',False));w.fill_holes.toggled.connect(w.fill_holes_changed);options.addWidget(w.fill_holes);body.addLayout(options)
+    options.addStretch()
+    w.fill_holes=QCheckBox('填充洞');w.fill_holes.setChecked(w.project.get('workspace',{}).get('fill_holes',DEFAULT_FILL_HOLES));w.fill_holes.toggled.connect(w.fill_holes_changed);options.addWidget(w.fill_holes,0,Qt.AlignmentFlag.AlignRight);body.addLayout(options)
     add_smoothing_slot(w,w.prompt_group,body)
     row=QHBoxLayout();row.setSpacing(6)
     w.apply_button=QPushButton(ui_text('action.apply'));w.apply_button.setObjectName('primary');w.apply_button.setToolTip(ui_text('annotation.build_editor.013'));w.apply_button.clicked.connect(w.predict);row.addWidget(w.apply_button,1)
@@ -94,16 +91,6 @@ def build_editor(w,layout):
     w.editor_group.setFixedHeight(116);layout.addWidget(w.editor_group)
 
 
-def build_reshape(w,layout):
-    w.reshape_group=QGroupBox(ui_text('reshape.title'));body=card_layout(w.reshape_group)
-    add_smoothing_slot(w,w.reshape_group,body)
-    row=QHBoxLayout()
-    w.reshape_other_button=QPushButton(ui_text('reshape.other'));w.reshape_other_button.setCheckable(True);w.reshape_other_button.clicked.connect(w.reshape_alternate);row.addWidget(w.reshape_other_button);body.addLayout(row)
-    row=QHBoxLayout()
-    w.reshape_cancel_button=QPushButton(ui_text('control_state.update_controls.012'));w.reshape_cancel_button.clicked.connect(w.cancel_reshape);row.addWidget(w.reshape_cancel_button);body.addLayout(row)
-    body.addStretch();layout.addWidget(w.reshape_group)
-
-
 def build_label_list(w,layout):
     from ..label_table import LabelTable
     w.labels_table=LabelTable()
@@ -114,13 +101,9 @@ def build_label_list(w,layout):
     w.labels_table.itemSelectionChanged.connect(w.table_selected);w.labels_table.cellDoubleClicked.connect(lambda *_:w.zoom_selected());layout.addWidget(w.labels_table,1)
     from ..label_table import LabelTablePresenter
     w.label_presenter=LabelTablePresenter(w.labels_table)
-    row=QHBoxLayout();row.setContentsMargins(0,0,0,0);row.setSpacing(6)
-    w.previous_button=QPushButton(ui_text('annotation.build_label_list.026'));w.previous_button.clicked.connect(lambda:w.review_target(-1));row.addWidget(w.previous_button,1)
-    w.next_button=QPushButton(ui_text('annotation.build_label_list.027'));w.next_button.clicked.connect(lambda:w.review_target(1));row.addWidget(w.next_button,1)
-    w.review_navigation=QWidget();w.review_navigation.setLayout(row);layout.addWidget(w.review_navigation)
-    row=QHBoxLayout();row.setContentsMargins(0,0,0,0);row.setSpacing(6)
-    w.zoom_button=QPushButton(ui_text('annotation.build_label_list.025'));w.zoom_button.clicked.connect(w.zoom_selected);row.addWidget(w.zoom_button,1)
-    w.delete_button=QPushButton(ui_text('action.delete'));w.delete_button.setProperty('role','danger');w.delete_button.clicked.connect(w.delete_selected);row.addWidget(w.delete_button,1);layout.addLayout(row)
+    from ..category_buttons import CategoryButtons
+    w.category_buttons=CategoryButtons();w.category_buttons.requested.connect(w.change_selected_label_class);w.category_buttons.nameHovered.connect(w.show_category_name)
+    layout.addWidget(w.category_buttons)
 
 
 def build_export(w,layout):

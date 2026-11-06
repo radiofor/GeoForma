@@ -1,28 +1,60 @@
 """Fill polygon interiors and preview masks without touching other labels."""
-from shapely.geometry import Polygon,shape,mapping
+from shapely.geometry import Polygon,shape
 from shapely.ops import unary_union
+from shapely.strtree import STRtree
+from .label_context import same_image
 
 
-def fill_holes(geometry,blockers=()):
-    if not geometry:return geometry
-    original=shape(geometry)
-    if original.is_empty or not original.is_valid or original.geom_type not in ('Polygon','MultiPolygon'):
-        raise ValueError('待填充的轮廓必须是有效多边形。')
-    parts=list(original.geoms) if original.geom_type=='MultiPolygon' else [original]
-    if not any(part.interiors for part in parts):return geometry
-    filled=unary_union([Polygon(part.exterior) for part in parts])
-    occupied=[]
-    for blocker in blockers:
-        candidate=shape(blocker)
-        if filled.intersects(candidate):occupied.append(candidate)
-    if occupied:filled=filled.difference(unary_union(occupied))
-    from .label_conflicts import polygonal
-    result=polygonal(filled)
-    if result is None:raise ValueError('填充后目标为空。')
+def has_holes(geometry):
+    """Check GeoJSON polygon rings without constructing a Shapely geometry."""
+    coordinates=geometry.get('coordinates',()) if geometry else ()
+    return (len(coordinates)>1 if geometry and geometry.get('type')=='Polygon' else
+            any(len(polygon)>1 for polygon in coordinates) if geometry and geometry.get('type')=='MultiPolygon' else False)
+
+
+def fill_label_holes(labels,task=None):
+    """Derive filled views without changing labels or occupying another label.
+
+    Smaller enclosing shells claim their holes first, so an inner annotation
+    takes precedence over an outer annotation that surrounds it. Existing
+    label footprints always retain ownership, independent of that ordering.
+    """
+    records=list(labels)
+    if not records:return []
+    if not any(has_holes(label['geometry']) for label in records):
+        if task:task.check()
+        return records
+    originals=[];shells=[]
+    for label in records:
+        if task:task.check()
+        raw=shape(label['geometry'])
+        if raw.is_empty or not raw.is_valid or raw.geom_type not in ('Polygon','MultiPolygon'):
+            raise ValueError('待填充的轮廓必须是有效多边形。')
+        parts=list(raw.geoms) if raw.geom_type=='MultiPolygon' else [raw]
+        shell=unary_union([Polygon(part.exterior) for part in parts]) if any(part.interiors for part in parts) else raw
+        originals.append(raw);shells.append(shell)
+    raw_tree=STRtree(originals);shell_tree=STRtree(shells)
+    order=sorted(range(len(records)),key=lambda i:(records[i].get('status')!='confirmed',shells[i].area,i))
+    added={};result=list(records)
+    for i in order:
+        if task:task.check()
+        extra=shells[i].difference(originals[i])
+        if extra.is_empty:continue
+        occupied=[originals[int(j)] for j in raw_tree.query(extra,predicate='intersects') if int(j)!=i and same_image(records[i],records[int(j)])]
+        occupied.extend(added[int(j)] for j in shell_tree.query(extra,predicate='intersects') if int(j) in added and same_image(records[i],records[int(j)]))
+        if occupied:extra=extra.difference(unary_union(occupied))
+        if extra.is_empty:continue
+        filled=originals[i].union(extra)
+        from .label_conflicts import polygonal
+        geometry=polygonal(filled)
+        if geometry is None:raise ValueError('填充后目标为空。')
+        added[i]=extra
+        record={key:value for key,value in records[i].items() if key not in ('_bounds','_render_path','_source_geometry','_source_path')}
+        record['geometry']=geometry;result[i]=record
     return result
 
 
-def fill_preview(bitmap,valid=None):
+def fill_preview(bitmap):
     """Fill four-connected interior gaps in a small preview."""
     import numpy as np
     from PIL import Image,ImageDraw,ImageOps
@@ -41,30 +73,6 @@ def fill_preview(bitmap,valid=None):
         image=ImageOps.expand(Image.fromarray(mask.astype('uint8')*255),border=1,fill=0)
         ImageDraw.floodfill(image,(0,0),128)
         filled=np.asarray(image)[1:-1,1:-1]!=128
-    if valid is not None:
-        allowed=np.asarray(Image.fromarray(np.asarray(valid,dtype='uint8')).resize((width,height),Image.Resampling.NEAREST),dtype=bool)
-        filled &= allowed
     return np.where(filled,np.asarray(bitmap).max(),0).astype(np.asarray(bitmap).dtype)
 
 
-def fill_prediction(geometry,valid,window):
-    """Fill holes without adding model pixels outside the valid raster mask."""
-    import numpy as np
-    filled=fill_holes(geometry)
-    if filled is geometry or np.asarray(valid,dtype=bool).all():return filled
-    from rasterio.features import rasterize,shapes
-    from rasterio.transform import Affine
-    allowed=np.asarray(valid,dtype=bool);transform=Affine.translation(window[0],window[1])
-    added=shape(filled).difference(shape(geometry))
-    invalid=(~allowed)&rasterize([(mapping(added),1)],out_shape=allowed.shape,transform=transform,dtype='uint8').astype(bool)
-    if not invalid.any():return filled
-    excluded=unary_union([shape(item) for item,_ in shapes(invalid.astype('uint8'),mask=invalid,transform=transform,connectivity=4)])
-    from .label_conflicts import polygonal
-    return polygonal(shape(filled).difference(excluded))
-
-
-def fill_reshape_result(result,blockers=()):
-    geometry=result['geometry'];filled=fill_holes(geometry,blockers)
-    if filled is geometry:return result
-    added=max(0,round(shape(filled).area-shape(geometry).area))
-    return dict(result,geometry=filled,added_pixels=result['added_pixels']+added)

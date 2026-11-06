@@ -3,9 +3,24 @@ from __future__ import annotations
 
 
 class ClassWorkflow:
+    def show_category_name(self,name):
+        status=self.statusBar();previous=getattr(self,'_category_status_name','')
+        if status.currentMessage() and status.currentMessage()!=previous:return
+        if name:status.showMessage(name)
+        elif previous:status.clearMessage()
+        self._category_status_name=name
+
+    def change_selected_label_class(self,category):
+        from ..operation_state import interaction_locked
+        if interaction_locked(self) or self.foreground_task_active() or len(self.selected_ids)!=1:return
+        identifier=next(iter(self.selected_ids))
+        row=next((item for item in self.label_presenter.rows if item.identifier==identifier),None)
+        if row is None or row.class_id==category:return
+        self.change_label_class(identifier,category)
+
     def change_label_class(self,identifier,category):
         from ..operation_state import interaction_locked
-        if interaction_locked(self) or self.foreground_task_active() or self.reshape_session is not None:return
+        if interaction_locked(self) or self.foreground_task_active():return
         if category not in {c['id'] for c in self.project['classes']}:return
         self.draft_labels()
         for draft in self.draft.get('reshape_batch') or [self.draft]:

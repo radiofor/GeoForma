@@ -63,7 +63,7 @@ class LabelWorkflow:
 
     def select_items(self,kind,values,additive=False,toggle=False):
         from ..operation_state import can_browse,interaction_locked
-        if interaction_locked(self) or self.reshape_session is not None or (self.prompt_task_busy() if kind=='points' else not can_browse(self)):return
+        if interaction_locked(self) or (self.prompt_task_busy() if kind=='points' else not can_browse(self)):return
         current=self.selected_points if kind=='points' else self.selected_ids;values=set(values)
         selection=(current.symmetric_difference(values) if toggle else current|values) if additive else values
         if kind=='points':
@@ -72,8 +72,8 @@ class LabelWorkflow:
             self.selected_ids=selection;self.selected_id=next(iter(selection)) if len(selection)==1 else None;self.refresh_labels()
 
     def delete_selection(self):
-        focus=self.focusWidget();table_focus=focus is self.labels_table or focus is not None and self.labels_table.isAncestorOf(focus)
-        if self.selected_points and not table_focus:self.delete_points()
+        focus=self.focusWidget();label_focus=any(focus is widget or focus is not None and widget.isAncestorOf(focus) for widget in (self.labels_table,self.category_buttons))
+        if self.selected_points and not label_focus:self.delete_points()
         else:self.delete_selected()
 
     def selected_label(self):
@@ -100,7 +100,8 @@ class LabelWorkflow:
         if self.draft_modified():self.statusBar().showMessage(ui_text('labels.edit_selected.004'),3000);return
         if locate:self.zoom_selected()
         self.clear_draft();self.selected_id=None;self.selected_ids.clear()
-        self.draft={'base_id':label['id'],'geometry':copy.deepcopy(label['geometry']),'seed_geometry':copy.deepcopy(label['geometry']),'window':copy.deepcopy(label.get('window')),'points':[],'box':None,'edge':label.get('edge',False),'score':label.get('score'),'model_metadata':copy.deepcopy(label.get('model',{})),'editing_state':label.get('editing_state','model')}
+        self.draft={'base_id':label['id'],'geometry':copy.deepcopy(label['geometry']),'window':copy.deepcopy(label.get('window')),'points':[],'box':None,'edge':label.get('edge',False),'score':label.get('score'),'model_metadata':copy.deepcopy(label.get('model',{})),'editing_state':label.get('editing_state','model')}
+        if self.draft['editing_state']!='manual':self.draft['seed_geometry']=copy.deepcopy(label['geometry'])
         if label.get('source')=='manual_draw':self.draft['source']='manual_draw'
         if label.get('manual_edits'):self.draft['manual_edits']=copy.deepcopy(label['manual_edits'])
         if label.get('class_id'):self.classes.setCurrentIndex(max(0,self.classes.findData(label['class_id'])))
@@ -108,11 +109,12 @@ class LabelWorkflow:
         self.update_draft_info();self.refresh_labels();self.update_controls();self.mark_dirty()
 
     def delete_selected(self):
-        if self.foreground_task_active() or self.reshape_session is not None:return
+        if self.foreground_task_active():return
         drafts=self.draft_labels();chosen=self.selected_ids or {self.draft.get('base_id')}
         saved_ids={l['id'] for l in self.current_labels()};draft_ids={d['id'] for d in drafts}
         deleted=chosen&(saved_ids|draft_ids)
         if not deleted:return
+        self.interrupt_reshape()
         entries=[(l['id'],copy.deepcopy(l),i) for i,l in enumerate(self.project['labels']) if l['id'] in deleted]
         self.record_label_operation(entries)
         from ..draft_parts import remove_parts
@@ -130,6 +132,23 @@ class LabelWorkflow:
         from ..session_validation import validate_draft
         try:validate_draft(self.draft,self.image['id'],{i['id'] for i in self.project['images']}|{self.image['id']},{l['id']:l for l in self.project['labels']},{c['id'] for c in self.project['classes']})
         except ValueError as error:self.statusBar().showMessage(str(error),5000);return
+        if self.draft.get('source')=='manual_draw' and not self.draft.get('base_id'):
+            from ..manual_holes import create_hole
+            try:hole_target=create_hole(self.draft['geometry'],self.current_labels())
+            except ValueError as error:self.error(str(error));return
+            if hole_target is not None:
+                if self.fill_holes.isChecked():
+                    self.statusBar().showMessage('请先取消填充洞，再添加洞。',4000);return
+                index=next(i for i,l in enumerate(self.project['labels']) if l['id']==hole_target['id'])
+                previous=copy.deepcopy(self.project['labels'][index])
+                self.flush_label_history()
+                # Lookups and background snapshots treat the collection as an
+                # immutable value; replace it so cached records are refreshed.
+                labels=list(self.project['labels']);labels[index]=hole_target;self.project['labels']=labels
+                self.label_undo.append([(hole_target['id'],previous,index)]);self.label_redo=[]
+                self.clear_draft();self.selected_id=hole_target['id'];self.selected_ids={hole_target['id']}
+                self.refresh_labels();self.label_presenter.reveal(hole_target['id']);self.mark_dirty();self.autosave()
+                return
         identifier=self.draft.get('base_id') or (self.draft.get('display_ids') or [None])[0] or uid();old=next((copy.deepcopy(l) for l in self.project['labels'] if l['id']==identifier),None)
         label={k:copy.deepcopy(self.draft.get(k)) for k in ['geometry','points','box','window','edge','score','feature_key']}
         for key in ('prompt_scope','prompt_group'):
@@ -144,13 +163,9 @@ class LabelWorkflow:
         model=copy.deepcopy(self.draft.get('model_metadata',{})) if manual_draw else {**copy.deepcopy(self.project['model']),**self.draft.get('model_metadata',{})}
         model['single_polygon']=self.single_polygon.isChecked()
         label.update(id=identifier,image_id=self.image['id'],class_id=self.classes.currentData(),status='confirmed',source='manual_draw' if manual_draw else 'interactive',annotation_mode=self.annotation_mode(),model=model,confirmed_at=datetime.now().isoformat())
+        original_geometry=label['geometry']
         from ..label_conflicts import resolve
         try:
-            if label.get('box') and label.get('editing_state')!='manual':
-                from ..prompt_bounds import clip_geometry
-                label['geometry']=clip_geometry(label['geometry'],label['box'])
-                if label['geometry'] is None:
-                    QMessageBox.information(self,ui_text('labels.confirm.008'),ui_text('prompts.empty_box_result'));return
             result=resolve(label,self.current_labels(),'clip')
             overlaps=result['blocked_ids']
             if result['geometry'] is None:
@@ -161,23 +176,23 @@ class LabelWorkflow:
                 from ..single_polygon import select_polygon
                 # After subtraction, keep the largest remaining part. Existing
                 # labels always win, including labels of a different class.
-                label['geometry']=select_polygon(label['geometry'],() if overlaps else self.draft.get('points',[]))
+                label['geometry']=select_polygon(label['geometry'])
                 result['saved_area']=shape(label['geometry']).area
             if overlaps:
                 label['model']['overlap_resolution']={k:result[k] for k in ('policy','blocked_ids','original_area','saved_area')}
                 label['model']['overlap_resolution']['component_policy']='largest_area' if single else 'keep_all'
+            from ..label_parts import split_resolved_label
+            saved=split_resolved_label(label,original_geometry,self.draft.get('display_ids',[]),self.draft.get('part_classes'))
         except Exception as e:self.error(str(e));return
         old_index=next((i for i,l in enumerate(self.project['labels']) if l['id']==identifier),len(self.project['labels']))
-        from ..label_parts import split_label
-        saved=split_label(label,self.draft.get('display_ids',[]))
-        for part in saved:part['class_id']=self.draft.get('part_classes',{}).get(part['id'],part['class_id'])
         removed_ids={l['id'] for l in result['removed']}
         history=[(identifier,old,old_index)]+[(l['id'],copy.deepcopy(l),i) for i,l in enumerate(self.project['labels']) if l['id'] in removed_ids]
         remaining=[l for l in self.project['labels'] if l['id']!=identifier and l['id'] not in removed_ids]
-        history.extend((part['id'],None,len(remaining)+i) for i,part in enumerate(saved) if i)
+        history.extend((part['id'],None,len(remaining)+i) for i,part in enumerate(saved) if part['id']!=identifier)
         self.flush_label_history()
-        self.project['labels']=remaining+saved;self.label_undo.append(history);self.label_redo=[];self.clear_draft();self.selected_id=identifier;self.selected_ids={part['id'] for part in saved}
-        self.refresh_labels();self.label_presenter.reveal(identifier);self.mark_dirty();self.autosave();self.log_message(ui_text('labels.confirm.006')+identifier[:8])
+        focus_id=saved[0]['id']
+        self.project['labels']=remaining+saved;self.label_undo.append(history);self.label_redo=[];self.clear_draft();self.selected_id=focus_id;self.selected_ids={part['id'] for part in saved}
+        self.refresh_labels();self.label_presenter.reveal(focus_id);self.mark_dirty();self.autosave();self.log_message(ui_text('labels.confirm.006')+focus_id[:8])
 
 
 

@@ -22,7 +22,7 @@ def assert_tool(w,tool):
     assert sum(action.isChecked() for action in w.mode_actions.values())==1
 
 
-@pytest.mark.parametrize('tool',['positive','negative','box','select_points','select','pan','reshape'])
+@pytest.mark.parametrize('tool',['positive','negative','box','select_points','select','pan'])
 def test_save_label_and_history_keep_the_chosen_tool(workbench,tool):
     w,app,wait,errors=workbench;ready_window(w);w.set_tool(tool)
     w.draft={'geometry':mapping(box(100,100,140,140)),'points':[],'pending':False}
@@ -87,7 +87,7 @@ def test_saving_and_selecting_next_label_keep_tool(workbench,tool):
     w.select_label('0');w.edit_selected(locate=False);assert_tool(w,tool)
     w.confirm_button.click();wait();assert_tool(w,tool)
     assert next(l for l in w.project['labels'] if l['id']=='0')['status']=='confirmed' and not w.draft
-    w.review_target();wait();assert_tool(w,tool)
+    w.select_label('1');wait();assert_tool(w,tool)
     assert not errors
 
 
@@ -124,7 +124,7 @@ def test_automatic_reshape_save_keeps_tool_and_does_not_start_another_edit(resha
     w.undo_label();assert_tool(w,tool);w.redo_label();assert_tool(w,tool)
 
 
-@pytest.mark.parametrize('tool',['positive','negative','box','select_points','select','pan','reshape'])
+@pytest.mark.parametrize('tool',['positive','negative','box','select_points','select','pan'])
 def test_manual_save_and_autosave_snapshot_keep_tool(workbench,tool):
     w,app,wait,errors=workbench;ready_window(w);w.set_tool(tool)
     w.save();wait();assert_tool(w,tool)

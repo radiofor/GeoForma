@@ -1,6 +1,7 @@
 """Small vector badges and inset details; updates never change status geometry."""
-from PySide6.QtCore import Qt,QRectF,QPointF
-from PySide6.QtGui import QColor,QPainter,QPainterPath,QPen
+from PySide6.QtCore import Qt,QRectF,QPointF,Signal,QEvent
+from PySide6.QtGui import QColor,QPainter,QPainterPath,QPen,QTextLayout,QTextOption
+from PySide6.QtWidgets import QScrollBar
 from .controls import ElidedLabel
 
 
@@ -60,8 +61,79 @@ class StatusBadge(ElidedLabel):
 
 
 class StatusDetail(ElidedLabel):
-    def __init__(self,text='',parent=None,notice=False):
-        super().__init__(text,parent);self.notice=notice
+    textChanged=Signal()
+    hoverChanged=Signal(bool)
+    def __init__(self,text='',parent=None,notice=False,wrap=False):
+        self.notice=notice;self.wrap=wrap;self._layout=None;self._layout_key=None
+        super().__init__(text,parent)
+        self.scrollbar=QScrollBar(Qt.Orientation.Vertical,self) if wrap else None
+        if self.scrollbar:
+            self.scrollbar.hide();self.scrollbar.valueChanged.connect(self.update);self.setMouseTracking(True)
+
+    def setText(self,text):
+        changed=str(text)!=getattr(self,'_source_text',None)
+        super().setText(text)
+        if changed:
+            self._layout_key=None
+            if hasattr(self,'scrollbar') and self.scrollbar:self.scrollbar.setValue(0)
+            if hasattr(self,'scrollbar'):self._sync_scrollbar()
+            self.textChanged.emit()
+
+    def _text_layout(self,width):
+        width=max(1,int(width));key=(self.text(),width,self.font().toString())
+        if key==self._layout_key:return self._layout
+        # QTextLayout treats paragraph separators as line breaks; a bare '\n'
+        # is otherwise drawn in the same visual line.
+        display=self.text().replace('\r\n','\n').replace('\r','\n').replace('\n','\u2028')
+        layout=QTextLayout(display,self.font());options=QTextOption()
+        options.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere);layout.setTextOption(options)
+        layout.beginLayout();y=0
+        while True:
+            line=layout.createLine()
+            if not line.isValid():break
+            line.setLineWidth(width);line.setPosition(QPointF(0,y));y+=line.height()
+        layout.endLayout();self._layout=layout;self._layout_key=key
+        return layout
+
+    def line_count(self,width=None):
+        if not self.wrap or not self.text():return 1
+        layout=self._text_layout(max(1,(self.width() if width is None else width)-37))
+        return max(1,layout.lineCount())
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if self.wrap:
+            if hasattr(self,'scrollbar'):self._sync_scrollbar()
+            self.textChanged.emit()
+
+    def changeEvent(self,event):
+        super().changeEvent(event)
+        if getattr(self,'wrap',False) and event.type() in (QEvent.Type.FontChange,QEvent.Type.StyleChange):
+            self._layout_key=None
+            if hasattr(self,'scrollbar'):
+                self._sync_scrollbar();self.textChanged.emit()
+
+    def _sync_scrollbar(self):
+        if not self.scrollbar:return
+        line_height=max(1,self.fontMetrics().height());visible=max(1,(self.height()-6)//line_height)
+        layout=self._text_layout(max(1,self.width()-37));overflow=layout.lineCount()>visible
+        if overflow:layout=self._text_layout(max(1,self.width()-47))
+        self.scrollbar.setGeometry(max(0,self.width()-10),3,8,max(0,self.height()-6))
+        self.scrollbar.setPageStep(visible);self.scrollbar.setRange(0,max(0,layout.lineCount()-visible))
+        if self.scrollbar.isHidden()==overflow:self.scrollbar.setVisible(overflow)
+
+    def enterEvent(self,event):
+        super().enterEvent(event)
+        if self.wrap:self.hoverChanged.emit(True)
+
+    def leaveEvent(self,event):
+        super().leaveEvent(event)
+        if self.wrap:self.hoverChanged.emit(False)
+
+    def wheelEvent(self,event):
+        if self.scrollbar and self.scrollbar.isVisible():
+            self.scrollbar.setValue(self.scrollbar.value()-(1 if event.angleDelta().y()>0 else -1));event.accept();return
+        super().wheelEvent(event)
 
     def paintEvent(self,event):
         if not self.text() or self.width()<32:return
@@ -70,6 +142,14 @@ class StatusDetail(ElidedLabel):
         painter.drawRoundedRect(QRectF(self.rect()).adjusted(.5,1,-.5,-1),6,6)
         is_file=any(suffix in self.text().lower() for suffix in ('.tif','.vrt','.geojson','.shp','.json'))
         symbol(painter,QRectF(8,(self.height()-13)/2,13,13),'file' if is_file else 'info','#43838a')
+        if self.wrap:
+            line_height=max(1,self.fontMetrics().height());overflow=not self.scrollbar.isHidden()
+            layout=self._text_layout(max(1,self.width()-47 if overflow else self.width()-37))
+            painter.setPen(QColor('#386570' if self.notice else '#526e7a'))
+            painter.setClipRect(QRectF(29,3,max(0,self.width()-37-(10 if overflow else 0)),max(0,self.height()-6)))
+            top=max(3,(self.height()-line_height)/2) if layout.lineCount()==1 else 3
+            offset=layout.lineAt(self.scrollbar.value()).y() if layout.lineCount() else 0
+            layout.draw(painter,QPointF(29,top-offset));return
         text=self.text();left=29;first,separator,rest=text.partition(' · ');metrics=painter.fontMetrics()
         # A compact phase capsule precedes the filename, which gets all remaining
         # space. Narrow windows fall back to a single elided line.

@@ -7,6 +7,15 @@ from ..domain import digest
 from ..tasks import Task
 
 
+def display_snapshot(image):
+    # Drafts and saved annotations are not inputs to the raster reader.
+    return copy.deepcopy({k:v for k,v in image.items() if k in ('id','path','width','height','fingerprint','display_recipe','transform','crs','assigned_crs','_reference')})
+
+
+def display_key(image,window,size):
+    return digest({'source':image.get('fingerprint',image['path']),'recipe':image['display_recipe'],'window':window,'size':size})
+
+
 @dataclass(frozen=True)
 class RasterRequest:
     key:str
@@ -35,8 +44,8 @@ class RasterRenderQueue(QObject):
         if self.closed:return
         self.generation=generation
         # Working drafts can be very large; they are not display inputs.
-        snapshot=copy.deepcopy({k:v for k,v in image.items() if k in ('id','path','width','height','fingerprint','display_recipe','transform','crs','assigned_crs','_reference')})
-        key=digest({'source':snapshot.get('fingerprint',snapshot['path']),'recipe':snapshot['display_recipe'],'window':window,'size':size})
+        snapshot=display_snapshot(image)
+        key=display_key(snapshot,window,size)
         request=RasterRequest(key,generation,self.revision,tuple(window),size,overview,snapshot)
         self.wanted[overview]=(generation,key)
         slot='pending_overview' if overview else 'pending_detail'
@@ -102,7 +111,7 @@ class RasterRenderQueue(QObject):
             self.cache_epoch+=1;self.cache.clear();self.cache_bytes=0
 
     def prime(self,image,window,size,value):
-        key=digest({'source':image.get('fingerprint',image['path']),'recipe':image['display_recipe'],'window':window,'size':size})
+        key=display_key(image,window,size)
         amount=sum(v.nbytes for v in value)
         if amount>self.max_bytes:return
         for array in value:array.setflags(write=False)
@@ -110,5 +119,7 @@ class RasterRenderQueue(QObject):
         self.cache[key]=value;self.cache_bytes+=amount
         while self.cache_bytes>self.max_bytes:
             _,removed=self.cache.popitem(last=False);self.cache_bytes-=sum(v.nbytes for v in removed)
+
+    def has_cached(self,image,window,size):return display_key(image,window,size) in self.cache
 
     def close(self):self.closed=True;self.pending_overview=None;self.pending_detail=None;self.cache.clear();self.cache_bytes=0

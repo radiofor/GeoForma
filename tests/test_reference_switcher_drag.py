@@ -27,6 +27,25 @@ def test_group_reorder_keeps_other_images_and_unseen_groups():
     assert reorder_reference_groups(records,['a','a']) is records
 
 
+def test_switching_images_reuses_reference_buttons_and_rebinds_records(workbench):
+    w,app,wait,errors=workbench
+    a,b=fake_image('a','first.tif'),fake_image('b','second.tif')
+    records=[dict(image,path=f'{group}/{image["path"]}',group=group,fingerprint=f'{group}-{image["id"]}')
+             for image in (a,b) for group in ('NDWI','VV')]
+    w.project['images']=[a,b];w.project['references']=records
+    w.refresh_images();w.images.setCurrentRow(0);wait()
+    holder=w.reference_switch_holder
+    first=[w.reference_buttons[(record['group'].casefold(),record['path'])] for record in records[:2]]
+    w.switch_reference(records[0]);assert first[0].isChecked()
+    w.images.setCurrentRow(1);wait()
+    second=[w.reference_buttons[(record['group'].casefold(),record['path'])] for record in records[2:]]
+    assert second==first and all(holder.row.itemAt(i).widget() is button for i,button in enumerate(first))
+    assert all(button.reference is record for button,record in zip(second,records[2:]))
+    assert all(not button.isChecked() for button in second) and w.main_image_button.isChecked()
+    QTest.mouseClick(second[0],Qt.MouseButton.LeftButton,pos=second[0].rect().center())
+    assert w.display_reference is records[2] and second[0].isChecked() and not errors
+
+
 @pytest.mark.parametrize(('start','target'),[(0,4),(4,0),(2,0),(2,4),(3,1),(1,3)])
 def test_drag_in_both_directions_reaches_each_destination(workbench,start,target):
     w,app,wait,errors=workbench;image=fake_image('main','tile.tif');w.project['images']=[image]

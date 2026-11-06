@@ -1,5 +1,7 @@
 """Shared desktop labels and message templates; keys are stable English identifiers."""
 
+from ..editing_state import MANUAL_PROMPT_LOCK_MESSAGE
+
 TEXT = {
     'project.loading': '正在打开项目…',
     'project.restoring': '正在恢复工作…',
@@ -7,7 +9,6 @@ TEXT = {
     'layout.prompt_tools': '提示编辑',
     'layout.pending': '提示待应用',
     'layout.unsaved': '轮廓未保存',
-    'layout.selected': '已选择 {} 个目标',
     'viewport.loading': '正在加载影像…',
     'viewport.load_failed': '影像读取失败，请检查源文件',
     'reshape.title': '重塑',
@@ -17,7 +18,7 @@ TEXT = {
     'reshape.finish_draft': '请先保存或取消当前修改',
     'reshape.other': '切换边界',
     'reshape.processing': '重塑轮廓',
-    'reshape.locked': '请先撤回人工修改，再编辑提示',
+    'reshape.locked': MANUAL_PROMPT_LOCK_MESSAGE,
     'shutdown.title': '正在退出',
     'shutdown.failed': '资源释放失败。请重新尝试退出。',
     'project.recover_previous': '恢复',
@@ -110,8 +111,6 @@ TEXT = {
     "models.done.002": "模型已准备完成 · ",
     "projects.new.001": "未保存项目",
     "projects.open_dialog.002": "打开项目或恢复文件",
-    "projects.saved.003": "已自动保存",
-    'projects.recovery_saved': '未命名工作已自动备份，点击“保存”选择项目位置。',
     "projects.save.004": "保存 GeoForma 项目",
     "projects.open_project.005": "项目已打开。",
     "projects.failed.006": "自动保存失败：",
@@ -128,7 +127,6 @@ TEXT = {
     "prompts.predict.008": "空提示已应用：清除当前分割结果，未调用模型。",
     "prompts.predict.009": "根据提示生成轮廓…",
     "prompts.predicted.010": "未生成有效轮廓。请调整提示点或框选范围。",
-    "prompts.update_draft_info.011": "未选择目标",
     "prompts.update_draft_info.012": "当前目标",
     "tasks.error.003": "任务未完成",
     "tasks.error.004": "任务已取消",
@@ -146,9 +144,6 @@ TEXT = {
     "annotation.build_editor.016": "保存当前目标",
     "action.cancel_edit": "取消编辑",
     "annotation.build_editor.018": "取消未保存修改（Esc）",
-    "annotation.build_label_list.025": "定位",
-    "annotation.build_label_list.026": "上一个",
-    "annotation.build_label_list.027": "下一个",
     "annotation.build_export.028": "导出",
     "annotation.build_export.032": "默认使用首幅影像坐标系，清空可恢复默认值。GeoJSON 固定使用 WGS 84。",
     "annotation.build_editor.047": "类别",

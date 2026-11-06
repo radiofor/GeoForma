@@ -87,12 +87,15 @@ class ExportWorkflow:
         # detach the records without copying their potentially large contours.
         labels=[dict(label) for label in labels]
         protected_paths=(self.project_path,) if self.project_path else ()
-        from ..smoothing import settings,smooth_batch
+        from ..smoothing import settings
         smoothing=settings(self.project,self.annotation_mode())
+        fill=self.fill_holes.isChecked()
         cache=self.smoother.geometry_cache;cache_epoch=cache.snapshot()
         def work(task):
             from ..exports import export_vector
-            output=[dict(label,smoothing_applied=smoothing['value']) for label in smooth_batch(labels,smoothing['value'],image,task,cache,cache_epoch)] if smoothing['enabled'] else labels
+            from ..label_presentation import presentation_batch
+            output=presentation_batch(labels,fill,smoothing,image,task,cache,cache_epoch)
+            if smoothing['enabled']:output=[dict(label,smoothing_applied=smoothing['value']) for label in output]
             result=export_vector(image,output,path,crs,task,classes,sources=sources,label_field=field,protected_paths=protected_paths)
             return result
         def exported(result):

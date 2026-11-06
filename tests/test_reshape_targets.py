@@ -4,25 +4,12 @@ import time
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QToolBar
-import pytest
 from shapely.geometry import shape
 from test_reshape import workbench, raster_image, G, OUT
 
 
-def preview(w, app):
-    w.reshape_session['stroke']=copy.deepcopy(OUT)
-    w.finish_reshape()
-    deadline=time.monotonic()+5
-    while w.task and time.monotonic()<deadline:
-        app.processEvents();QTest.qWait(2)
-    assert w.reshape_session is None and not w.view.reshape_items and not w.view.reshape_points
-    assert w.draft['editing_state']=='manual'
 
 
-def draft_target(w):
-    w.project['labels']=[];w.selected_id=None;w.selected_ids.clear()
-    w.draft={'geometry':copy.deepcopy(G),'points':[[25,25,1]],'pending':False,'window':[0,0,100,100]}
-    w.refresh_labels()
 
 
 def test_toolbar_draws_immediately_without_selecting_a_label(workbench):
@@ -39,41 +26,20 @@ def test_toolbar_draws_immediately_without_selecting_a_label(workbench):
     assert w.mode_actions['reshape'].isChecked() and w.view.reshape_picking
 
 
-def test_unsaved_draft_reshape_cancel_commit_undo_redo_and_confirm(workbench):
-    w,app,_=workbench;draft_target(w);original=copy.deepcopy(w.draft)
-    w.begin_reshape();w.add_reshape_point(22,28);w.cancel_reshape()
-    assert w.draft==original and not w.project['labels']
-    w.begin_reshape();preview(w,app)
-    assert not w.project['labels'] and shape(w.draft['geometry']).area==124
-    assert w.model_prompts_locked() and len(w.draft['manual_edits'])==1
-    calls=[];w.service.predict=lambda *a:calls.append(a)
-    w.add_point(25,25,0);assert w.draft['points']==original['points'] and not calls
-    w.undo_context();assert w.draft==original and not w.model_prompts_locked()
-    w.redo_context();assert w.model_prompts_locked() and shape(w.draft['geometry']).area==124
-    w.confirm()
-    assert len(w.project['labels'])==1
-    assert w.project['labels'][0]['editing_state']=='manual'
-    assert len(w.project['labels'][0]['manual_edits'])==1
+def test_reshape_keyboard_alternate_and_cancel_without_changing_panel(workbench):
+    w,app,_=workbench;w.show();app.processEvents();w.begin_reshape(auto=True)
+    assert w.mode_settings.currentWidget() is w.prompt_group
+    w.view.setFocus();app.processEvents()
+    QTest.keyClick(w.view.viewport(),Qt.Key.Key_R);app.processEvents()
+    assert w.reshape_session['alternate']
+    QTest.keyClick(w.view.viewport(),Qt.Key.Key_Escape);app.processEvents()
+    assert w.reshape_session is None and w.mode_settings.currentWidget() is w.prompt_group
 
 
-def test_unsaved_manual_history_survives_project_reopen(workbench):
-    w,app,tmp=workbench;draft_target(w);w.begin_reshape();preview(w,app)
-    w.project_path=tmp/'draft.gfm';w.save();w.open_project(w.project_path)
-    assert w.draft['editing_state']=='manual' and not w.project['labels']
-    w.undo_context();assert shape(w.draft['geometry']).equals(shape(G)) and not w.model_prompts_locked()
-    w.redo_context();assert shape(w.draft['geometry']).area==124 and w.model_prompts_locked()
 
 
-def test_reshaping_existing_draft_waits_for_label_confirmation(workbench):
-    w,app,_=workbench;original=copy.deepcopy(w.project['labels'][0])
-    w.edit_selected(locate=False);w.begin_reshape();preview(w,app)
-    assert w.project['labels'][0]==original and w.draft['editing_state']=='manual'
-    w.confirm()
-    assert len(w.project['labels'])==1 and w.project['labels'][0]['id']=='target'
-    assert shape(w.project['labels'][0]['geometry']).area==124
-    assert w.project['labels'][0]['editing_state']=='manual' and not w.model_prompts_locked()
-    w.undo_context();w.select_label('target')
-    assert w.project['labels'][0]==original and not w.model_prompts_locked()
+
+
 
 
 def test_finish_controls_save_and_leave_tool(workbench):
@@ -84,22 +50,12 @@ def test_finish_controls_save_and_leave_tool(workbench):
     deadline=time.monotonic()+5
     while w.task and time.monotonic()<deadline:app.processEvents();QTest.qWait(2)
     assert w.reshape_session is None and not w.view.reshape_items and w.view.mode=='reshape'
-    assert not w.reshape_group.isVisible() and w.editor_group.isVisible()
+    assert w.mode_settings.currentWidget() is w.prompt_group and w.editor_group.isVisible()
     assert w.project['labels']!=original and not w.draft
     assert shape(w.project['labels'][0]['geometry']).area==124
     assert not w.confirm_button.isEnabled()
     w.undo_context();assert w.project['labels']==original and not w.model_prompts_locked()
 
 
-def test_unsaved_pending_stroke_survives_project_reopen(workbench):
-    w,app,tmp=workbench;draft_target(w);w.begin_reshape()
-    w.add_reshape_point(22,28);w.add_reshape_point(22,34)
-    w.project_path=tmp/'pending.gfm'
-    w.capture_workspace()
-    from geoforma.storage import save_project
-    save_project(w.project,w.project_path)
-    w.cancel_reshape();w.open_project(w.project_path)
-    assert w.reshape_session['target']=='draft' and len(w.reshape_session['stroke'])==2
-    assert shape(w.draft['geometry']).equals(shape(G)) and not w.project['labels']
 
 

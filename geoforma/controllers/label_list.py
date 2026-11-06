@@ -36,8 +36,7 @@ class LabelListWorkflow:
     def label_index_signature(self,labels=None):
         if labels is None:labels=self.current_labels()
         return (self.image['id'] if self.image else None,
-                tuple((l['id'],l['status'],id(l['geometry']),l.get('score'),bool(l.get('edge')),l.get('class_id'),
-                       l.get('editing_state','model'),tuple(l.get('box') or ()),l.get('model',{}).get('single_polygon')) for l in labels),
+                tuple((l['id'],l['status'],id(l['geometry']),l.get('score'),bool(l.get('edge')),l.get('class_id')) for l in labels),
                 self.annotation_mode())
 
     def ensure_label_index(self,labels=None):
@@ -100,13 +99,4 @@ class LabelListWorkflow:
             title=names.get(label.get('class_id'),'未分类')
             status=ui_text('status.unsaved' if label['id'] in draft_ids else 'status.editing' if label['id'] in editing_ids else 'status.confirmed')
             rows.append(LabelRow(label['id'],title,status,bool(label.get('edge')),label['id'] in self.selected_ids,label.get('class_id')))
-        self.label_presenter.set_categories(self.project['classes'],self.change_label_class)
         self.label_presenter.sync(rows);self.redraw();self.update_controls()
-
-    def review_target(self,step=1):
-        if self.foreground_task_active() or self.reshape_session is not None:return
-        ids=[row.identifier for row in self.label_presenter.rows]
-        if not ids:return
-        current=self.selected_id
-        position=(ids.index(current)+step)%len(ids) if current in ids else (0 if step>0 else len(ids)-1)
-        self.select_label(ids[position]);self.zoom_selected()

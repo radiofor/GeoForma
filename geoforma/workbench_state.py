@@ -22,6 +22,7 @@ class WorkbenchState:
     runtime_status:dict|None=None
     dirty:bool=False
     dirty_revision:int=0
+    interaction_revision:int=0
     project_epoch:int=0
     closing:bool=False
     last_error:str=''

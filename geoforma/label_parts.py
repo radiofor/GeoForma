@@ -18,3 +18,26 @@ def split_label(label,identifiers=()):
         record.update(id=label['id'] if index==0 else identifiers[index] if index<len(identifiers) else uid(),geometry=mapping(part))
         records.append(record)
     return records
+
+
+def split_resolved_label(label,original_geometry,identifiers=(),part_classes=None):
+    """Keep draft identities and classes attached to their original components.
+
+    The resolved geometry must be a subset of the original. Clipping can
+    change component sizes, remove a component or split it, so match the
+    resolved geometry to each original component before assigning IDs.
+    """
+    classes=part_classes or {}
+    if original_geometry['type']=='Polygon':
+        # A single source component cannot exchange identity with another.
+        # Avoid a costly intersection and preserve unchanged ring ordering.
+        return split_label(dict(label,class_id=classes.get(label['id'],label['class_id'])))
+    from .label_conflicts import polygonal
+    original=dict(label,geometry=original_geometry)
+    resolved=shape(label['geometry']);records=[]
+    for part in split_label(original,identifiers):
+        geometry=polygonal(shape(part['geometry']).intersection(resolved))
+        if geometry is None:continue
+        part.update(geometry=geometry,class_id=classes.get(part['id'],label['class_id']))
+        records.extend(split_label(part))
+    return records

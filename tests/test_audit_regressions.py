@@ -2,7 +2,7 @@ import copy,json,time
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from shapely.geometry import shape,mapping,box
+from shapely.geometry import shape,mapping,box,Point
 from geoforma.domain import new_project
 from geoforma.storage import load_project,save_project
 from geoforma.reshape import reshape_intent,reshape_patch
@@ -66,16 +66,18 @@ def test_cancel_check_reaches_polygon_extraction():
     with pytest.raises(Cancelled):reshape_patch(reshape_intent(G,OUT),{'width':100,'height':100},task=SimpleNamespace(check=check))
 
 
-def test_generated_staircase_edits_keep_grid_and_unchanged_lower_body():
+def test_generated_vector_edits_preserve_stroke_and_unchanged_lower_body():
     rng=np.random.default_rng(42)
     for _ in range(80):
         x=float(rng.uniform(22,25));height=float(rng.uniform(31.2,36.7))
         stroke=[[21,28],[x,height],[29,28]]
-        try:result=reshape_patch(reshape_intent(G,stroke),{'width':100,'height':100})
+        intent=reshape_intent(G,stroke)
+        try:result=reshape_patch(intent,{'width':100,'height':100})
         except ValueError as error:
             assert '改变' in str(error);continue
         g=shape(result['geometry']);assert g.is_valid and g.intersection(box(0,0,100,29)).equals(shape(G).intersection(box(0,0,100,29)))
-        assert all(x==int(x) and y==int(y) for x,y in g.exterior.coords)
+        assert g.equals(shape(intent['candidate']))
+        assert g.boundary.distance(Point(x,height))<1e-10
 
 
 def test_bootstrap_disables_embedded_python_in_vrt(monkeypatch):

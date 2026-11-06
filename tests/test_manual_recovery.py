@@ -6,7 +6,6 @@ from PySide6.QtWidgets import QApplication
 from geoforma.window import MainWindow
 from geoforma.domain import new_project
 from geoforma.storage import save_project,load_project
-from geoforma.recovery import recovery_target
 from geoforma.model_preferences import application_settings
 
 
@@ -43,11 +42,13 @@ def test_missing_formal_project_disables_recovery_even_with_sidecar(workspace):
     w.update_controls();assert not w.recover_button.isEnabled();w.recover_button.click();assert not calls
 
 
-def test_legacy_fallback_chooses_newest_available(workspace):
+def test_unrecorded_recovery_is_not_offered_and_recorded_untitled_wins(workspace):
     w,app,tmp=workspace;root=tmp/'data';unsaved=root/'recovery'/'untitled.gfm';formal=tmp/'saved.gfm'
     w.settings.remove('recovery/last_work')
     save_project(new_project(),formal);project=new_project();project['images']=[{'id':'image','path':'source.tif'}];save_project(project,unsaved)
-    os.utime(formal,ns=(100,100));os.utime(unsaved,ns=(200,200));w.settings.setValue('last_project',str(formal))
+    os.utime(unsaved,ns=(100,100));os.utime(formal,ns=(200,200));w.settings.setValue('last_project',str(formal))
+    assert w.previous_work() is None
+    w.settings.setValue('recovery/last_work',str(unsaved))
     assert w.previous_work()==unsaved
     Path(str(formal)+'.autosave').write_text('{}');assert w.previous_work()==unsaved
 

@@ -2,23 +2,7 @@
 from .text import ui_text
 from dataclasses import dataclass
 from PySide6.QtCore import Qt,QSignalBlocker,QEvent
-from PySide6.QtWidgets import QTableWidget,QTableWidgetItem,QAbstractItemView,QHeaderView,QScrollBar,QSizePolicy,QWidget,QHBoxLayout
-
-
-class CategoryCell(QWidget):
-    """Center the category field with compact clearance between rows."""
-    def __init__(self,parent=None):
-        super().__init__(parent)
-        from .centered_combo import CenteredComboBox
-        self.combo=CenteredComboBox(self);self.combo.setMinimumWidth(0)
-        self.combo.expand_popup=True
-        self.combo.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Fixed)
-        self.combo.setStyleSheet('QComboBox{padding:2px 6px;min-height:18px;}')
-        layout=QHBoxLayout(self);layout.setContentsMargins(6,2,6,2);layout.setSpacing(0)
-        layout.addWidget(self.combo,1,Qt.AlignmentFlag.AlignVCenter)
-        self.sync_metrics()
-
-    def sync_metrics(self):self.combo.setFixedHeight(max(26,self.fontMetrics().height()+8))
+from PySide6.QtWidgets import QTableWidget,QTableWidgetItem,QAbstractItemView,QHeaderView,QScrollBar
 
 
 class LabelTable(QTableWidget):
@@ -47,16 +31,9 @@ class LabelTable(QTableWidget):
         self.body_scrollbar.valueChanged.connect(native.setValue)
         self.sync_row_metrics()
 
-    def category_combo(self,row):
-        cell=self.cellWidget(row,1)
-        return cell.combo if isinstance(cell,CategoryCell) else None
-
     def sync_row_metrics(self):
         height=max(32,self.fontMetrics().height()+14)
         self.verticalHeader().setMinimumSectionSize(height);self.verticalHeader().setDefaultSectionSize(height)
-        for row in range(self.rowCount()):
-            cell=self.cellWidget(row,1)
-            if isinstance(cell,CategoryCell):cell.sync_metrics()
         self.sync_serial_width(self.rowCount())
         self.sync_status_width()
 
@@ -102,27 +79,11 @@ class LabelRow:
 
 
 class LabelTablePresenter:
-    def __init__(self,table):self.table=table;self.rows=();table.setColumnCount(3);self.categories=();self.category_callback=None;self.categories_changed=False
-
-    def set_categories(self,categories,callback):
-        values=tuple((c['id'],c['name']) for c in categories)
-        self.categories_changed=values!=self.categories;self.categories=values;self.category_callback=callback
-
-    def category_editor(self,row,index):
-        if self.category_callback is None:return
-        combo=self.table.category_combo(index)
-        if combo is None or combo.property('labelId')!=row.identifier:
-            cell=CategoryCell();combo=cell.combo
-            combo.setProperty('labelId',row.identifier);combo.setAccessibleName(ui_text('labels.category_accessible').format(row.identifier))
-            combo.currentIndexChanged.connect(lambda _,c=combo:self.category_callback(c.property('labelId'),c.currentData()))
-            self.table.setCellWidget(index,1,cell)
-        blocked=QSignalBlocker(combo)
-        values=tuple((combo.itemData(i),combo.itemText(i)) for i in range(combo.count()))
-        if values!=self.categories:
-            combo.clear()
-            for identifier,name in self.categories:combo.addItem(name,identifier)
-        combo.setCurrentIndex(combo.findData(row.class_id));combo.setPlaceholderText(row.title)
-        del blocked
+    def __init__(self,table):
+        self.table=table;self.rows=();table.setColumnCount(3)
+        if isinstance(table,LabelTable):
+            from .list_transition import LabelListTransition
+            self.transition=LabelListTransition(table)
 
     def reveal(self,identifier):
         for row in range(self.table.rowCount()):
@@ -133,17 +94,26 @@ class LabelTablePresenter:
 
     def sync(self,rows):
         rows=tuple(rows)
-        if rows==self.rows and not self.categories_changed:return
+        if rows==self.rows:return
         table=self.table;structural=tuple(r.identifier for r in rows)!=tuple(r.identifier for r in self.rows)
         blocker=QSignalBlocker(table);scroll=table.verticalScrollBar().value()
+        # Different images have disjoint IDs; reuse existing item objects.
+        rebind=structural and bool(rows) and bool(self.rows) and not ({r.identifier for r in rows}&{r.identifier for r in self.rows})
+        viewport=table.viewport();updates=viewport.updatesEnabled()
+        if structural and updates:viewport.setUpdatesEnabled(False)
         try:
-            if structural:
+            if rebind:
+                table.setRowCount(len(rows))
+                for i in range(table.rowCount()):
+                    for c in range(3):
+                        if table.item(i,c) is None:table.setItem(i,c,QTableWidgetItem())
+            elif structural:
                 wanted={r.identifier for r in rows}
                 for i in range(table.rowCount()-1,-1,-1):
                     if table.item(i,0).data(Qt.ItemDataRole.UserRole) not in wanted:table.removeRow(i)
             for i,row in enumerate(rows):
-                if not structural and row==self.rows[i] and not self.categories_changed:continue
-                if i>=table.rowCount() or table.item(i,0).data(Qt.ItemDataRole.UserRole)!=row.identifier:
+                if not structural and row==self.rows[i]:continue
+                if not rebind and (i>=table.rowCount() or table.item(i,0).data(Qt.ItemDataRole.UserRole)!=row.identifier):
                     existing=next((j for j in range(i,table.rowCount()) if table.item(j,0).data(Qt.ItemDataRole.UserRole)==row.identifier),None)
                     if existing is None:
                         table.insertRow(i)
@@ -157,15 +127,16 @@ class LabelTablePresenter:
                     if item.data(Qt.ItemDataRole.UserRole)!=row.identifier:item.setData(Qt.ItemDataRole.UserRole,row.identifier);item.setToolTip(row.identifier)
                 if serial.text()!=str(i+1):serial.setText(str(i+1))
                 if first.text()!=row.title:first.setText(row.title)
-                if first.data(Qt.ItemDataRole.UserRole)!=row.identifier:first.setData(Qt.ItemDataRole.UserRole,row.identifier);first.setToolTip(row.identifier)
+                if first.toolTip()!=row.title:first.setToolTip(row.title)
+                first.setData(Qt.ItemDataRole.AccessibleTextRole,row.title)
+                first.setData(Qt.ItemDataRole.AccessibleDescriptionRole,ui_text('labels.category_accessible').format(row.identifier))
                 if state.text()!=row.status:state.setText(row.status)
-                self.category_editor(row,i)
                 tip=ui_text('label_table.sync.001') if row.edge else ''
                 if state.toolTip()!=tip:state.setToolTip(tip)
                 for item in (serial,first,state):
                     if item.isSelected()!=row.selected:item.setSelected(row.selected)
             self.rows=rows
-            self.categories_changed=False
         finally:
             if structural:table.verticalScrollBar().setValue(scroll)
             del blocker
+            if structural and updates:viewport.setUpdatesEnabled(True);viewport.update()

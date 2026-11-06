@@ -2,6 +2,7 @@
 from PySide6.QtCore import Qt, QRectF, QPointF
 from PySide6.QtGui import QImage, QPixmap, QPainterPath, QPainterPathStroker, QPen, QColor, QTransform
 from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsPixmapItem
+from collections import OrderedDict
 from .label_item import LabelItem, LABEL_RED
 from .path_cache import GeometryPathCache
 from .pixmap_cache import RasterPixmapCache
@@ -51,17 +52,36 @@ class SceneLayers:
         pixmaps=self.pixmap_cache if keep_paths else RasterPixmapCache()
         self.base_item=None;self.detail_item=None;self.preview_item=None;self.overlay_records={};self.overlay_items=[];self.prompt_items=[];self.point_records={};self.box_item=None;self.path_cache=paths;self.pixmap_cache=pixmaps;self.overlay_visible=True
         self.raster_epoch=None
-        self.annotation_context=None;self.annotation_sets={}
+        self.annotation_context=None;self.annotation_sets=OrderedDict()
     def set_annotation_context(self,context):
         if context==self.annotation_context:return
-        self.annotation_sets[self.annotation_context]={'overlays':self.overlay_records,'points':self.point_records,'box':self.box_item}
+        if self.annotation_context is not None:
+            self.annotation_sets[self.annotation_context]={'overlays':self.overlay_records,'points':self.point_records,'box':self.box_item}
+            self.annotation_sets.move_to_end(self.annotation_context)
         for item in self.overlay_items+self.prompt_items:item.setVisible(False)
         self.clear_preview()
         self.annotation_context=context
-        state=self.annotation_sets.setdefault(context,{'overlays':{},'points':{},'box':None})
+        state=self.annotation_sets.setdefault(context,{'overlays':{},'points':{},'box':None}) if context is not None else {'overlays':{},'points':{},'box':None}
+        if context is not None:self.annotation_sets.move_to_end(context)
         self.overlay_records=state['overlays'];self.point_records=state['points'];self.box_item=state['box']
         self.overlay_items=list(self.overlay_records.values());self.prompt_items=list(self.point_records.values())+([self.box_item] if self.box_item is not None else [])
         for item in self.overlay_items+self.prompt_items:item.setVisible(self.overlay_visible)
+        self._trim_annotation_sets()
+
+    def _trim_annotation_sets(self):
+        def count(state):return len(state['overlays'])+len(state['points'])+(state['box'] is not None)
+        while len(self.annotation_sets)>4 or sum(count(state) for state in self.annotation_sets.values())>2000:
+            key=next((key for key in self.annotation_sets if key!=self.annotation_context),None)
+            if key is None:break
+            state=self.annotation_sets.pop(key)
+            for item in list(state['overlays'].values())+list(state['points'].values())+([state['box']] if state['box'] is not None else []):
+                self.scene().removeItem(item)
+
+    def prepare_image_switch(self):
+        self.set_annotation_context(None);self.clear_preview()
+        for item in (self.base_item,self.detail_item):
+            if item is not None:self.scene().removeItem(item)
+        self.base_item=None;self.detail_item=None;self.raster_epoch=None
 
     def clear_detail(self):
         if self.detail_item is not None:self.scene().removeItem(self.detail_item);self.detail_item=None

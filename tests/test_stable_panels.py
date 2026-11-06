@@ -13,9 +13,21 @@ def settle(app):
 
 def rectangles(w):
     names=('mode_settings','editor_group','labels_table',
-           'zoom_button','review_navigation','export_group','image_scroll','model_button',
+           'category_buttons','export_group','image_scroll','model_button',
            'images','image_info','state_label','context_status')
     return {name:(getattr(w,name).mapTo(w,QPoint()).toTuple(),getattr(w,name).size().toTuple()) for name in names}
+
+
+def test_fill_holes_option_stays_right_aligned_without_overlap(workbench):
+    w,app,wait,errors=workbench
+    options=w.prompt_group.layout().itemAt(1).layout()
+    for width in (320,480):
+        w.resize(1440,900);w.resizeDocks([w.annotation_dock],[width],Qt.Orientation.Horizontal);settle(app)
+        assert w.fill_holes.geometry().right()==options.geometry().right()
+        assert w.fill_holes.mapToGlobal(QPoint(w.fill_holes.width(),0)).x()==w.smooth_unit.mapToGlobal(QPoint(w.smooth_unit.width(),0)).x()
+        assert w.single_polygon.geometry().right()<w.fill_holes.geometry().left()
+        assert w.fill_holes.width()>=w.fill_holes.sizeHint().width()
+    assert not errors
 
 
 def test_model_selector_and_device_share_one_stable_row(workbench):
@@ -70,32 +82,38 @@ def test_dynamic_text_and_progress_keep_controls_in_place(workbench):
     try:
         w.update_controls();w.task_progress(1,10,'长路径/'*100);settle(app)
         assert w.progress.isVisible() and w.cancel_button.isVisible()
-        assert rectangles(w)==before
-        assert w.statusBar().text_slot.geometry()==task_slot
+        # Long status text may increase the status row; sidebar widths and
+        # horizontal placement remain unchanged while its text stays visible.
+        after=rectangles(w)
+        for name in ('mode_settings','editor_group','labels_table','category_buttons','export_group','image_scroll','model_button','images','image_info'):
+            assert after[name][0][0]==before[name][0][0] and after[name][1][0]==before[name][1][0]
+        assert w.statusBar().height()>=42 and w.statusBar().text_slot.width()==task_slot.width()
     finally:
         w.progress_presentation.finish('测试任务','cancelled');w.task=None;w.task_kind=None;w.update_controls();settle(app)
-    assert rectangles(w)==before
+    assert w.image_scroll.width()==before['image_scroll'][1][0]
     assert not errors
 
 
 def test_each_mode_uses_compact_stable_height(workbench):
     w,app,wait,errors=workbench;w.resize(1440,900)
     im=fake_image('one');im['ready']=True;w.project['images']=[im];w.refresh_images();w.images.setCurrentRow(0)
+    w.project['labels']=[dict(id='target',image_id='one',class_id=1,status='confirmed',geometry=mapping(box(100,100,200,200)))]
+    w.refresh_labels()
     settle(app);before=rectangles(w)
     settle(app)
     assert w.mode_settings.currentWidget() is w.prompt_group
     assert not hasattr(w,'auto_group') and not hasattr(w,'tabs')
-    w.draft={'geometry':mapping(box(100,100,200,200)),'points':[],'pending':False}
-    w.refresh_labels();w.begin_reshape();settle(app)
-    assert w.mode_settings.currentWidget() is w.reshape_group
-    assert w.editor_group.isVisible() and not w.editor_group.isEnabled()
-    assert 0<=w.mode_settings.height()-w.reshape_group.layout().minimumSize().height()<=16
+    w.begin_reshape(auto=True);settle(app)
+    assert w.mode_settings.currentWidget() is w.prompt_group
+    assert w.editor_group.isVisible() and w.editor_group.isEnabled()
+    assert rectangles(w)==before
     reshaping=rectangles(w)
     assert not hasattr(w,'reshape_info')
-    message='重塑操作提示'*100;before_message=w.statusBar().currentMessage()
+    message='重塑失败'
     w.reshape_error(w.reshape_session,message);w.update_controls();settle(app)
-    assert w.statusBar().currentMessage()==before_message
+    assert w.statusBar().currentMessage()==message
     assert rectangles(w)==reshaping
+    w.statusBar().clearMessage();settle(app)
     w.cancel_reshape();settle(app)
     assert w.mode_settings.currentWidget() is w.prompt_group and rectangles(w)==before
     assert not errors
@@ -107,9 +125,10 @@ def test_transient_notifications_do_not_hide_or_resize_status_items(workbench):
     bar.showMessage('提示说明'*100,30);settle(app)
     assert bar.currentMessage()=='提示说明'*100
     assert bar.notice.toolTip()==bar.currentMessage() and w.state_label.isVisible()
-    assert bar.text_slot.geometry()==slot and rectangles(w)==before
+    assert bar.text_slot.width()==slot.width() and bar.height()>=42
+    assert w.image_scroll.width()==before['image_scroll'][1][0]
     QTest.qWait(50);settle(app)
-    assert bar.currentMessage()=='' and bar.text_slot.currentIndex()==0
+    assert bar.currentMessage()=='' and bar.text_slot.currentWidget() is w.context_status
     assert bar.text_slot.geometry()==slot and rectangles(w)==before
 
 

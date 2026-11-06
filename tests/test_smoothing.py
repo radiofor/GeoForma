@@ -60,6 +60,21 @@ def test_manual_reshape_is_not_clipped_to_its_old_prompt_box(monkeypatch):
     assert shape(result[0]['geometry']).equals(original)
 
 
+def test_saved_smoothing_keeps_parts_despite_old_model_metadata_and_respects_neighbors(monkeypatch):
+    from geoforma import smoothing
+    source=MultiPolygon([box(5,5,12,12),box(20,5,24,9)])
+    records=[dict(label('one',source),box=[5,5,12,12],model={'single_polygon':True}),
+             dict(label('two',box(13,5,18,12)),class_id=2)]
+    def candidate(geometry,*args):
+        if geometry.geom_type=='MultiPolygon':return MultiPolygon([box(5,5,14,12),box(20,5,24,9)])
+        return geometry
+    monkeypatch.setattr(smoothing,'_smooth_shape',candidate)
+    result=smooth_batch(records,1,{'width':40,'height':40})
+    first,second=(shape(row['geometry']) for row in result)
+    assert first.geom_type=='MultiPolygon' and len(first.geoms)==2
+    assert first.intersection(second).area==0 and second.equals(box(13,5,18,12))
+
+
 def test_checkbox_updates_all_items_in_place_and_off_restores_exact_sources(smooth_workbench):
     w,app,wait,errors=smooth_workbench;original=copy.deepcopy(w.project['labels'])
     items={key:value for key,value in w.view.overlay_records.items()}
@@ -92,16 +107,15 @@ def test_fractional_project_smoothing_is_rejected(smooth_workbench,tmp_path):
     with pytest.raises(ValueError,match='整数像素'):load_project(path)
 
 
-def test_project_file_materializes_checkbox_state_and_preserves_sources(smooth_workbench,tmp_path):
+def test_project_file_preserves_only_current_source_and_smoothing_setting(smooth_workbench,tmp_path):
     w,app,wait,errors=smooth_workbench;raw=copy.deepcopy(w.project['labels'])
     w.project['labels'].append(label('other',box(160,20,220,80)))
     w.smooth_enabled.setChecked(True);settled(w,app)
     snapshot=project_snapshot(w.project);path=tmp_path/'smooth.gfm';save_project(snapshot,path)
     data=json.loads(path.read_text(encoding='utf-8'))
-    assert not shape(data['labels'][0]['geometry']).equals(shape(raw[0]['geometry']))
-    assert shape(data['labels'][0]['source_geometry']).equals(shape(raw[0]['geometry']))
-    assert not shape(data['labels'][2]['geometry']).equals(box(160,20,220,80))
-    assert shape(data['labels'][2]['source_geometry']).equals(box(160,20,220,80))
+    assert shape(data['labels'][0]['geometry']).equals(shape(raw[0]['geometry']))
+    assert shape(data['labels'][2]['geometry']).equals(box(160,20,220,80))
+    assert all('source_geometry' not in label and 'smoothing_applied' not in label for label in data['labels'])
     restored=load_project(path)
     assert shape(restored['labels'][0]['geometry']).equals(shape(raw[0]['geometry']))
     assert settings(restored,'individual')['enabled']
@@ -132,7 +146,7 @@ def test_crs_rows_and_export_text_are_centered(smooth_workbench):
         for column in range(2):assert w.labels_table.item(row,column).textAlignment()==Qt.AlignmentFlag.AlignCenter
 
 
-def test_smoothing_does_not_expand_into_nodata(tmp_path):
+def test_smoothing_does_not_depend_on_raster_nodata(tmp_path):
     import rasterio
     from rasterio.features import rasterize
     from rasterio.transform import Affine
@@ -143,7 +157,8 @@ def test_smoothing_does_not_expand_into_nodata(tmp_path):
     with rasterio.open(path,'w',driver='GTiff',width=60,height=60,count=3,dtype='uint8',nodata=0,transform=Affine(1,0,10,0,-1,10)) as source:source.write(np.stack([a]*3))
     image=inspect_source(path);image['model_recipe']=make_recipe(image,[1,2,3])
     output=smooth_batch([label('a',g)],1,image)[0]
-    assert shape(output['geometry']).difference(g).area<1e-9
+    expected=smooth_batch([label('a',g)],1,{'width':60,'height':60})[0]
+    assert shape(output['geometry']).equals(shape(expected['geometry']))
 
 
 @pytest.mark.parametrize('extension',['gpkg','shp','geojson'])

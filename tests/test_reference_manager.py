@@ -122,7 +122,8 @@ def test_management_updates_active_type_without_render_then_removes_active_safel
     assert w.view.overlay_records['label'] is item and w.view.point_records[0] is point and w.view.box_item is bounds
     assert all(Path(ref['path']).is_file() for ref in references)
     # Real rendering completes the fallback and cannot republish the removed source.
-    DisplayWorkflow.request_render(w,True);wait()
+    w.request_render=lambda overview=False:DisplayWorkflow.request_render(w,overview)
+    w.request_render(True);wait()
     assert not w.reference_transition_pending and not errors
     save_project(w.project,path);assert [ref['group'] for ref in load_project(path)['references']]==['VV']
 

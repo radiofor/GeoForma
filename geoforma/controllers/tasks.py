@@ -36,9 +36,12 @@ class TaskWorkflow:
                 if self.task is not None:self.pending_task_retry=retry
                 else:QTimer.singleShot(0,self,retry)
 
-    def run(self,title,fn,callback,kind=None,on_error=None,on_finished=None):
+    def run(self,title,fn,callback,kind=None,on_error=None,on_finished=None,deferred_valid=None):
         from ..operation_state import can_start_operation
-        if kind in ('interactive','reshape','history','export') and self.defer_for_prefetch(lambda:self.run(title,fn,callback,kind,on_error,on_finished)):return True
+        def resume():
+            if deferred_valid is not None and not deferred_valid():return
+            self.run(title,fn,callback,kind,on_error,on_finished,deferred_valid)
+        if kind in ('interactive','reshape','manual_polygon','history','export') and self.defer_for_prefetch(resume):return True
         if not can_start_operation(self):return False
         retry_title=title;retry_fn=fn;context=self.annotation_context()
         retry_model=(self.project_epoch,digest(self.project['model']))
@@ -68,7 +71,7 @@ class TaskWorkflow:
         if kind in ('model','model_warmup'):
             from ..model_catalog import model_title
             title='加载模型：'+model_title(self.project['model'])
-        elif kind in ('interactive','reshape','bands','export','history') and self.image:
+        elif kind in ('interactive','reshape','manual_polygon','bands','export','history') and self.image:
             name=self.image.get('name') or Path(self.image.get('path','')).name or self.image.get('id','当前影像')
             title=title.rstrip('…')+'：'+name
         self.task_title=title;self.task_stage='';self.task_outcome='running';self.progress_presentation.begin()
@@ -153,7 +156,7 @@ class TaskWorkflow:
         self.update_progress_count(current,total)
         if self.task_kind=='preparation' and self.preparing_id:
             image=next((im for im in self.project['images'] if im['id']==self.preparing_id),None)
-            if image and total and text.startswith(('准备影像','检查完整影像缓存')):image['preparation_progress']=[current,total];self.mark_dirty()
+            if image and total and text.startswith(('准备影像','检查完整影像缓存')):image['preparation_progress']=[current,total];self.mark_dirty(background=True)
 
     def finished(self,on_finished=None):
         title=self.task_title
@@ -172,7 +175,7 @@ class TaskWorkflow:
             if target and target.get('preparation_state')=='preparing':
                 target['preparation_state']=('queued' if target['id'] in self.preparation.ids else 'pending') if superseded else 'paused'
                 if not superseded:self.preparation.add([target['id']])
-                self.refresh_images();self.mark_dirty()
+                self.refresh_images();self.mark_dirty(background=True)
         self.task.retry_operation=None
         self.task=None;self.preparing_id=None
         if self.last_error and outcome=='complete':outcome='failed'

@@ -20,7 +20,7 @@ class ReferenceWorkflow:
         self.mark_dirty();self.update_controls();self.autosave()
 
     def import_references_dialog(self):
-        if not can_start_operation(self) or self.reshape_session is not None:return
+        if not can_start_operation(self):return
         paths,_=QFileDialog.getOpenFileNames(self,'导入参考影像',str(self.settings.value('last_reference_directory','') or ''),'TIF 影像或 VRT (*.tif *.tiff *.vrt);;VRT 批量导入 (*.vrt);;TIF 影像 (*.tif *.tiff)')
         if not paths:return
         from ..dialogs import ReferenceNameDialog
@@ -30,7 +30,7 @@ class ReferenceWorkflow:
             self.settings.setValue('last_reference_directory',str(Path(paths[0]).parent));self.import_reference_paths(paths,group)
 
     def import_reference_paths(self,paths,group):
-        if not can_start_operation(self) or self.reshape_session is not None:return
+        if not can_start_operation(self):return
         try:group=reference_group_name(group)
         except ValueError as error:self.statusBar().showMessage(str(error),5000);return
         if not self.project['images']:
@@ -93,7 +93,7 @@ class ReferenceWorkflow:
     def sync_reference_buttons(self):
         context=(self.project_epoch,self.image['id'] if self.image else None)
         if context!=getattr(self,'reference_context',None):
-            self.reference_context=context;self.display_reference=None;self.visible_reference=None;self.reference_transition_pending=False
+            self.reference_context=context;self.display_reference=None;self.visible_reference=None;self.reference_transition_pending=False;self.transition_detail=None
         refs=self.current_references()
         self.display_reference=equivalent_reference(self.display_reference,refs)
         enabled=bool(self.image) and not interaction_locked(self)
@@ -121,13 +121,13 @@ class ReferenceWorkflow:
         self.display_reference=current;self.start_reference_transition()
 
     def start_reference_transition(self):
-        self.reference_transition_pending=True;self.render_generation+=1;self.raster_renderer.reset(self.render_generation)
+        self.transition_detail=None;self.reference_transition_pending=True;self.render_generation+=1;self.raster_renderer.reset(self.render_generation)
         self.render_timer.stop();self.request_render(True)
 
     def display_image(self):return display_descriptor(self.image,self.display_reference)
 
     def reference_render_failed(self,message):
         if not self.reference_transition_pending:return
-        self.display_reference=getattr(self,'visible_reference',None);self.reference_transition_pending=False
+        self.display_reference=getattr(self,'visible_reference',None);self.reference_transition_pending=False;self.transition_detail=None
         from ..error_messages import user_message
         self.sync_reference_buttons();self.statusBar().showMessage('参考读取失败 · '+user_message(message),8000)

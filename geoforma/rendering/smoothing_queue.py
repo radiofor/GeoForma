@@ -11,6 +11,9 @@ def prepare_paths(records,value,task=None):
     for label in value:
         if task:task.check()
         label['_render_path']=geometry_path(label['geometry'])
+        if '_bounds' not in label:
+            bounds=label['_render_path'].boundingRect()
+            label['_bounds']=[bounds.left(),bounds.top(),bounds.right(),bounds.bottom()]
         label['_source_geometry']=sources[label['id']];label['_source_path']=geometry_path(sources[label['id']])
     return value
 
@@ -27,7 +30,7 @@ class SmoothingQueue(QObject):
         self.geometry_cache=SmoothingGeometryCache()
         self.timer=QTimer(self);self.timer.setSingleShot(True);self.timer.setInterval(35);self.timer.timeout.connect(self._start)
 
-    def request(self,key,records,fn):
+    def request(self,key,records,fn,*,immediate=False):
         if self.closed:return None
         if self.last and self.last[0]==key:
             if self.key!=key:
@@ -41,7 +44,7 @@ class SmoothingQueue(QObject):
         if key!=self.key:
             self.key=key;self.pending=(key,records,fn)
             if self.task:self.task.cancel()
-            self.timer.start()
+            self.timer.start(0 if immediate else 35)
         return None
 
     def _start(self):

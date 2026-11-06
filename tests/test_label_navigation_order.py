@@ -1,4 +1,4 @@
-"""Previous/next follows the actual visible table."""
+"""Table order and manual selection follow the visible label records."""
 from shapely.geometry import box,mapping
 from test_workbench import workbench,fake_image
 
@@ -6,7 +6,7 @@ from test_workbench import workbench,fake_image
 def rows(window):return [row.identifier for row in window.label_presenter.rows]
 
 
-def test_navigation_follows_numbered_rows(workbench):
+def test_selection_follows_numbered_rows(workbench):
     w,app,wait,errors=workbench
     image=fake_image('one');image['ready']=True;w.project['images']=[image]
     w.refresh_images();w.images.setCurrentRow(0)
@@ -17,23 +17,22 @@ def test_navigation_follows_numbered_rows(workbench):
                          label('saved-b','confirmed',300),label('legacy','candidate',500)]
     w.refresh_labels();wait()
     assert rows(w)==['saved-z','saved-a','saved-b']
-    w.select_label('saved-z');w.review_target(1);assert w.selected_id=='saved-a'
-    w.review_target(1);assert w.selected_id=='saved-b'
-    w.review_target(1);assert w.selected_id=='saved-z'
+    w.select_label('saved-z');w.select_label('saved-a');assert w.selected_id=='saved-a'
+    w.select_label('saved-b');assert w.selected_id=='saved-b'
+    w.select_label('saved-z');assert w.selected_id=='saved-z'
     w.clear_draft();w.select_label('saved-z')
-    w.review_target(-1);assert w.selected_id=='saved-b'
-    w.review_target(1);assert w.selected_id=='saved-z'
+    w.select_label('saved-b');assert w.selected_id=='saved-b'
+    w.select_label('saved-z');assert w.selected_id=='saved-z'
     w.select_label('saved-a')
     w.auto_apply.setChecked(False);w.add_point(510,110,1);before=dict(w.draft);selected=w.selected_id
-    w.review_target(1);assert w.draft==before
+    w.select_label('saved-b');assert w.draft==before
     assert not errors
 
 
-def test_navigation_disabled_when_no_rows(workbench):
+def test_category_buttons_disabled_when_no_rows(workbench):
     w,app,wait,errors=workbench
     image=fake_image('one');image['ready']=True;w.project['images']=[image]
     w.refresh_images();w.images.setCurrentRow(0)
     w.project['labels']=[]
     w.refresh_labels();wait()
-    assert not rows(w) and not w.previous_button.isEnabled() and not w.next_button.isEnabled()
-    w.review_target(1);assert not w.draft
+    assert not rows(w) and not w.category_buttons.isEnabled() and not w.draft

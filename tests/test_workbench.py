@@ -74,12 +74,12 @@ def test_individual_saved_label_edit_reset_and_confirmation(workbench):
     w.redo_label();wait();assert not errors
 
 
-def test_review_navigation_includes_active_candidate(workbench):
+def test_selection_preserves_active_candidate(workbench):
     w,app,wait,errors=workbench;populate(w,wait)
-    w.select_items('labels',['1']);w.review_target(1);assert w.selected_id=='2' and not w.draft
-    w.review_target(-1);assert w.selected_id=='1' and not w.draft
-    w.add_point(440,140,1);w.review_target(1);assert w.selected_id=='0' and w.draft['points']==[[440,140,1]]
-    w.clear_draft();w.select_label('1');w.edit_selected();w.review_target(1);assert w.selected_id=='0' and w.draft['base_id']=='1' and not w.draft['points']
+    w.select_items('labels',['1']);w.select_label('2');assert w.selected_id=='2' and not w.draft
+    w.select_label('1');assert w.selected_id=='1' and not w.draft
+    w.add_point(440,140,1);w.select_label('0');assert w.selected_id=='0' and w.draft['points']==[[440,140,1]]
+    w.clear_draft();w.select_label('1');w.edit_selected();w.select_label('0');assert w.selected_id=='0' and w.draft['base_id']=='1' and not w.draft['points']
 
 
 def test_category_change_is_staged_and_saved_without_model_inference(workbench):
@@ -87,7 +87,7 @@ def test_category_change_is_staged_and_saved_without_model_inference(workbench):
     w.project['classes'].append({'id':2,'name':'道路'});w.refresh_classes()
     w.select_label('0');w.edit_selected();geometry=copy.deepcopy(w.draft['geometry'])
     w.classes.setCurrentIndex(w.classes.findData(2));assert w.draft_modified()
-    w.review_target(1);assert w.draft['base_id']=='0'
+    w.select_label('1');assert w.draft['base_id']=='0'
     assert w.confirm_button.isEnabled() and not w.apply_button.isEnabled()
     w.confirm();wait()
     label=next(l for l in w.project['labels'] if l['id']=='0')
@@ -101,8 +101,8 @@ def test_category_change_is_staged_and_saved_without_model_inference(workbench):
 
 def test_small_window_can_scroll_to_every_operation(workbench):
     w,app,wait,errors=workbench;populate(w,wait);w.select_items('labels',['1']);w.draft['edge']=True;w.update_draft_info();w.update_controls();w.resize(1024,700);app.processEvents()
-    w.editor_scroll.ensureWidgetVisible(w.next_button);app.processEvents()
-    bottom=w.next_button.mapTo(w.editor_scroll.viewport(),w.next_button.rect().bottomRight())
+    w.editor_scroll.ensureWidgetVisible(w.category_buttons);app.processEvents()
+    bottom=w.category_buttons.mapTo(w.editor_scroll.viewport(),w.category_buttons.rect().bottomRight())
     assert w.editor_scroll.viewport().rect().contains(bottom)
     for a in [w.delete_action,w.undo_prompt_action,w.raw_view_action]:
         toolbar=next(parent for parent in w.findChildren(__import__('PySide6.QtWidgets',fromlist=['QToolBar']).QToolBar) if parent.widgetForAction(a))

@@ -27,3 +27,28 @@ def test_lookup_changes_with_save_delete_append_and_image_switch():
     assert [l['id'] for l in lookup.for_image(labels,'one')]==['saved']
     assert lookup.for_id(labels,'one','a') is None
     assert [l['id'] for l in lookup.for_image(labels,'two')]==['other']
+
+
+def test_switching_disjoint_images_reuses_table_items_with_new_ids():
+    from geoforma.ui.label_table import LabelTable
+    app=QApplication.instance() or QApplication([]);table=LabelTable();presenter=LabelTablePresenter(table)
+    presenter.sync([LabelRow('old1','A','已保存',class_id=1),LabelRow('old2','A','已保存',class_id=1)])
+    items=[table.item(i,1) for i in range(2)]
+    presenter.sync([LabelRow('new1','B','已保存',class_id=2),LabelRow('new2','A','已保存',class_id=1)])
+    assert [table.item(i,1) for i in range(2)]==items
+    assert table.item(0,0).data(256)=='new1'
+    assert table.item(0,1).text()=='B' and table.cellWidget(0,1) is None
+    table.close()
+
+
+def test_large_list_never_creates_per_row_editors():
+    from geoforma.ui.label_table import LabelTable
+    app=QApplication.instance() or QApplication([]);table=LabelTable();table.resize(300,240);table.show();app.processEvents()
+    presenter=LabelTablePresenter(table)
+    rows=[LabelRow(str(i),'A','已保存',class_id=1) for i in range(300)]
+    presenter.sync(rows);app.processEvents()
+    assert table.rowCount()==300 and all(table.cellWidget(i,1) is None for i in range(300))
+    table.verticalScrollBar().setValue(table.verticalScrollBar().maximum());app.processEvents()
+    assert table.item(299,1).text()=='A'
+    presenter.sync([]);assert table.rowCount()==0
+    table.close()

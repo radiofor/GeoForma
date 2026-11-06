@@ -13,12 +13,12 @@ from ..editing_state import draft_snapshot,geometry_history
 class PromptWorkflow:
     def fill_holes_changed(self,enabled):
         if getattr(self,'restoring_project',False):return
-        self.invalidate_preview();self.mark_dirty()
+        self.invalidate_preview();self.mark_dirty();self.presentation_options_changed()
         self.update_controls()
 
     def single_polygon_changed(self,enabled):
         if getattr(self,'restoring_project',False):return
-        if self.model_prompts_locked():return
+        if self.model_prompts_locked(include_reshape=False):return
         self.invalidate_preview();self.mark_dirty()
         if enabled and self.mode_index==0 and self.draft.get('geometry'):
             from ..single_polygon import constrain_choice
@@ -49,8 +49,10 @@ class PromptWorkflow:
         self.tool_modes[self.annotation_mode()]=mode
 
     def restore_tool(self,preferred=None):
-        from ..tool_state import restored_tool
-        self.activate_tool(restored_tool(preferred,self.view.selected_mode,self.annotation_mode()))
+        from ..tool_state import restored_tool,has_reshape_target
+        tool=restored_tool(preferred,self.view.selected_mode,self.annotation_mode())
+        if tool=='reshape' and not has_reshape_target(self):tool='pan'
+        self.activate_tool(tool)
         self.update_controls()
 
 
@@ -208,12 +210,11 @@ class PromptWorkflow:
     def update_draft_info(self):
         self.prompt_counters.set_points(self.draft.get('points') or [])
         if self.draft.get('manual_vertices'):text='绘制中 · 右键完成'
-        elif self.model_prompts_locked():
+        elif self.model_prompts_locked(include_reshape=False):
             text=ui_text('reshape.draft_changed') if self.draft.get('manual_edits') else ui_text('reshape.locked')
         elif self.draft.get('pending'):text=ui_text('layout.pending')
         elif self.draft.get('geometry'):text=ui_text('layout.unsaved')
-        elif self.selected_ids:text=ui_text('layout.selected').format(len(self.selected_ids))
-        else:text=ui_text('prompts.update_draft_info.011')
+        else:text=''
         self.edit_status.setText(text)
 
     def clear_draft(self):

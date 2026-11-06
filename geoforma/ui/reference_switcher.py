@@ -75,18 +75,28 @@ class ReferenceSwitcher(QWidget):
     def set_references(self,records,current,enabled):
         signature=tuple((record['group'],record['path'],record['fingerprint'],id(record),reference_tooltip(record)) for record in records)
         if signature!=self.signature:
-            self.cancel_drag();self._stop_shifts();self.signature=signature;old=self.buttons;buttons={}
-            while self.row.count():self.row.takeAt(0)
-            for record in records:
-                key=(record['group'].casefold(),record['path']);button=old.pop(key,None)
+            self.cancel_drag()
+            if self.shift_animations:self._stop_shifts()
+            self.signature=signature;old={key[0]:button for key,button in self.buttons.items()};buttons={}
+            wanted={record['group'].casefold() for record in records}
+            for group in tuple(old):
+                if group not in wanted:
+                    button=old.pop(group);self.row.removeWidget(button);button.hide();button.deleteLater()
+            for index,record in enumerate(records):
+                key=(record['group'].casefold(),record['path']);button=old.pop(key[0],None)
                 if button is None:button=ReferenceButton(self)
                 button.reference=record;name=record['group']
                 caption=name if len(name)<=REFERENCE_NAME_LIMIT else name[:REFERENCE_NAME_LIMIT-1]+'…'
-                button.setText(button.fontMetrics().elidedText(caption,Qt.TextElideMode.ElideRight,button.width()-18))
-                button.setToolTip(reference_tooltip(record));self.row.addWidget(button);buttons[key]=button
-            for button in old.values():button.hide();button.deleteLater()
-            self.buttons=buttons;self.natural=len(buttons)*self.button_width+max(0,len(buttons)-1)*self.row.spacing()
-            self.buttons_widget.setMinimumWidth(self.natural);self.fit_width()
+                text=button.fontMetrics().elidedText(caption,Qt.TextElideMode.ElideRight,button.width()-18)
+                if button.text()!=text:button.setText(text)
+                tooltip=reference_tooltip(record)
+                if button.toolTip()!=tooltip:button.setToolTip(tooltip)
+                if self.row.indexOf(button)!=index:
+                    self.row.removeWidget(button);self.row.insertWidget(index,button)
+                buttons[key]=button
+            self.buttons=buttons;natural=len(buttons)*self.button_width+max(0,len(buttons)-1)*self.row.spacing()
+            if natural!=self.natural:
+                self.natural=natural;self.buttons_widget.setMinimumWidth(natural);self.fit_width()
         self.set_current(current)
         for button in self.buttons.values():button.setEnabled(enabled)
         if not enabled:self.cancel_drag()

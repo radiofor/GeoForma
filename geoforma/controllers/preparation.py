@@ -51,7 +51,7 @@ class PreparationWorkflow:
                 # A completed image cache still needs a resident model.
                 if signature!=(self.runtime_status or {}).get('signature') and signature!=self.model_warmup_signature:
                     def ready(result):
-                        self.project['model']['checkpoint']=result['checkpoint'];self.record_runtime(result);self.mark_dirty()
+                        self.project['model']['checkpoint']=result['checkpoint'];self.record_runtime(result);self.mark_dirty(background=True)
                     self.run(ui_text('tasks.warmup_model'),lambda t:self.service.prepare_model(config,t),ready,kind='model_warmup')
                     return
             self.update_controls();return
@@ -67,13 +67,13 @@ class PreparationWorkflow:
             target.update(ready=True,preparation_state='ready',prepared_bounds=bounds,
                 prepared_cache_revision=self.service.cache_revision,
                 prepared_full_signature=preparation_signature(target,self.project['model']),preparation_progress=[result['count'],result['count']])
-            self.refresh_images();self.mark_dirty();self.log_message(ui_text('tasks.done.008').format(p0=target['name'],p1=result['count'],p2=result['hits']))
+            self.refresh_images();self.mark_dirty(background=True);self.log_message(ui_text('tasks.done.008').format(p0=target['name'],p1=result['count'],p2=result['hits']))
         def failed(message):
             if getattr(self.task,'preparation_superseded',False):
                 target['preparation_state']='queued' if target['id'] in self.preparation.ids else 'pending'
-                target['ready']=False;self.refresh_images();self.mark_dirty();return
+                target['ready']=False;self.refresh_images();self.mark_dirty(background=True);return
             target['preparation_state']='paused' if ui_text('tasks.error.004') in message else 'failed';target['ready']=False
-            self.preparation.paused=True;self.preparation.add([target['id']]);self.refresh_images();self.mark_dirty()
+            self.preparation.paused=True;self.preparation.add([target['id']]);self.refresh_images();self.mark_dirty(background=True)
         self.run(ui_text('tasks.start_preparation.009')+target['name'],lambda t:self.service.preprocess(image,config,bounds,t),done,kind='preparation',on_error=failed)
 
 

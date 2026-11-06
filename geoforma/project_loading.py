@@ -37,7 +37,8 @@ def prepare_project(path,viewport_size,task=None,read_frame=True,project=None):
     image=next((im for im in project['images'] if im['id']==state.get('image_id')),next(iter(project['images']),None))
     mode_index=0;mode='individual';session=(image or {}).get('mode_sessions',{}).get(mode,{})
     draft=copy.deepcopy(state.get('draft') or session.get('draft') or {})
-    if draft.get('base_id') and not draft.get('seed_geometry'):
+    if draft.get('editing_state')=='manual':draft.pop('seed_geometry',None)
+    elif draft.get('base_id') and not draft.get('seed_geometry'):
         original=next((l for l in project['labels'] if l['id']==draft['base_id']),None)
         if original:draft['seed_geometry']=copy.deepcopy(original['geometry'])
     loaded=LoadedProject(project,image,mode_index,draft,None,navigation=state.get('navigation') or session.get('navigation'),
@@ -55,17 +56,19 @@ def prepare_project(path,viewport_size,task=None,read_frame=True,project=None):
     for i,label in enumerate(visible):
         check();label['_render_path']=geometry_path(label['geometry'])
         if (i+1)%256==0:stage(f'缓存标签轮廓 · {i+1}/{len(visible)}',i+1,len(visible))
-    from .smoothing import settings,smooth_batch
+    from .smoothing import settings,smoothing_sources
+    from .label_presentation import presentation_batch
+    from .domain import DEFAULT_FILL_HOLES
     config=settings(project,mode)
-    if config['enabled']:
-        stage('准备平滑轮廓')
+    fill=state.get('fill_holes',DEFAULT_FILL_HOLES)
+    if config['enabled'] or fill:
         saved=loaded.index.visible({})
-        sources=[l for l in saved if not (draft.get('geometry') and l['id']==draft.get('base_id'))]
-        if draft.get('geometry'):
-            sources.append({'id':'__draft','geometry':draft['geometry'],'box':draft.get('box'),'status':'draft','editing_state':draft.get('editing_state','model'),
-                            'model':{'single_polygon':not mode_index and state.get('single_polygon',False)}})
-        from .rendering.smoothing_queue import prepare_paths
-        loaded.smoothing=(sources,prepare_paths(sources,smooth_batch(sources,config['value'],image,task),task))
+        sources=smoothing_sources(saved,draft,draft.get('geometry'))
+        from .hole_filling import has_holes
+        if sources and (config['enabled'] or any(has_holes(label['geometry']) for label in sources)):
+            stage('准备平滑轮廓')
+            from .rendering.smoothing_queue import prepare_paths
+            loaded.smoothing=(sources,prepare_paths(sources,presentation_batch(sources,fill,config,image,task),task))
     check()
     if read_frame and image.get('display_recipe'):
         width,height=viewport_size;size=max(800,min(2200,max(width,height)*2));loaded.size=size

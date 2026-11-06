@@ -77,3 +77,5 @@ def test_returning_to_an_image_reuses_its_cached_geometry_path(viewport,monkeypa
     view.overlays([near]);view.set_image(2000,2000);view.overlays([])
     view.set_image(5000,5000);view.overlays([near])
     assert calls==[near['geometry']] and id(near['geometry']) in view.path_cache
+
+

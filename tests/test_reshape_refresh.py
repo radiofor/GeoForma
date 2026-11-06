@@ -28,7 +28,8 @@ def test_repeated_control_refresh_does_not_toggle_locked_widgets(workbench):
     for _ in range(12):w.update_controls();settle(app)
     assert not watch.events
     assert not watch.paints
-    assert all(not widget.isEnabled() for widget in widgets)
+    assert all(widget.isEnabled() for widget in widgets[:-1])
+    assert not w.apply_button.isEnabled()
 
 
 def test_right_click_accepts_repeated_crossings_with_one_label_refresh(workbench,monkeypatch):

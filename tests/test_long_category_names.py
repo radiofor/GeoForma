@@ -25,7 +25,7 @@ def test_large_serials_have_room_without_changing_the_table_width(workbench):
 def test_long_category_popup_expands_without_losing_text(workbench,name):
     w,app,tmp=workbench;w.project['classes']=[{'id':1,'name':name},{'id':2,'name':'普通类别'}]
     w.refresh_classes();w.refresh_labels();w.resize(1280,900);w.show();app.processEvents()
-    for combo in (w.classes,w.labels_table.category_combo(0)):
+    for combo in (w.classes,):
         window_size=w.size();field_width=combo.width();combo.showPopup();app.processEvents()
         view=combo.view();popup=view.window();area=combo.screen().availableGeometry()
         assert popup.width()>field_width and area.contains(popup.geometry())
@@ -39,18 +39,18 @@ def test_long_category_popup_expands_without_losing_text(workbench,name):
             assert view.visualRect(combo.model().index(1,0)).bottom()<=view.viewport().rect().bottom()
         popup.grab().save(str(tmp/('category_popup_top.png' if combo is w.classes else 'category_popup_row.png')))
         combo.hidePopup()
+    item=w.category_buttons.items[1]
+    assert item.text()==name and item.toolTip()==name
+    assert w.labels_table.item(0,1).text()==name and w.labels_table.item(0,1).toolTip()==name
 
 
-def test_long_category_popup_keyboard_selection_can_be_undone(workbench):
+def test_long_category_buttons_keyboard_selection_can_be_undone(workbench):
     w,app,_=workbench;name='Long_Category_'*100
     w.project['classes']=[{'id':1,'name':name},{'id':2,'name':'普通类别'}];w.refresh_classes();w.refresh_labels();w.show();app.processEvents()
-    combo=w.labels_table.category_combo(0);combo.showPopup();app.processEvents();geometry=combo.view().window().geometry()
-    combo.view().horizontalScrollBar().setValue(combo.view().horizontalScrollBar().maximum());combo.hidePopup()
-    combo.showPopup();app.processEvents()
-    assert combo.view().window().geometry()==geometry and combo.view().horizontalScrollBar().value()==0
-    QTest.keyClick(combo.view(),Qt.Key.Key_Down);QTest.keyClick(combo.view(),Qt.Key.Key_Return);app.processEvents()
+    w.select_label('target');buttons=w.category_buttons;buttons.setCurrentItem(buttons.items[2]);buttons.setFocus()
+    QTest.keyClick(buttons,Qt.Key.Key_Return);app.processEvents()
     assert w.project['labels'][0]['class_id']==2
-    w.undo_context();assert w.project['labels'][0]['class_id']==1 and combo.currentText()==name
+    w.undo_context();assert w.project['labels'][0]['class_id']==1 and buttons.active==1
 
 
 def test_class_editor_can_show_and_preserve_names_beyond_line_edit_default(workbench):

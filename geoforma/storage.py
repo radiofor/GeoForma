@@ -35,7 +35,7 @@ def project_snapshot(project):
     return snapshot
 
 
-def save_project(project, path, *, smoothing_cache=None, cache_epoch=None):
+def save_project(project, path):
     path=Path(path)
     SourceGuard(project_sources(project)).check(path)
     require_project_path(path);path.parent.mkdir(parents=True,exist_ok=True)
@@ -47,11 +47,11 @@ def save_project(project, path, *, smoothing_cache=None, cache_epoch=None):
         if 'color' in category:category['color']=normalize_color(category['color'])
     captured=payload.pop('_snapshot_time_ns',None);now=time.time_ns()
     captured=captured if type(captured) is int and 0<captured<=now else now
-    if any(config.get('enabled') for config in payload.get('smoothing',{}).values()) or any('source_geometry' in label for label in project['labels']):
-        from .smoothing import stored_labels
-        labels=stored_labels(project,cache=smoothing_cache,cache_epoch=cache_epoch)
-    else:labels=project['labels']
-    payload['labels']=copy.deepcopy(labels)
+    payload['labels']=copy.deepcopy(project['labels'])
+    from .label_validation import reject_project_legacy_geometry
+    reject_project_legacy_geometry(payload)
+    for label in payload['labels']:
+        label.pop('smoothing_applied',None)
     relocate_sources(payload,path.parent,relative=True)
     with atomic_target(path) as part:
         with part.open('w',encoding='utf-8') as stream:json.dump(payload,stream,ensure_ascii=False,indent=2,allow_nan=False)
@@ -73,9 +73,6 @@ def load_project(path):
     project['export_label_field']=label_field(project)
     from .history import validate_history
     validate_history(project)
-    for label in project['labels']:
-        if 'source_geometry' in label:
-            label['geometry']=label.pop('source_geometry');label.pop('smoothing_applied',None)
     relocate_sources(project,path.parent)
     image_ids={i['id'] for i in project['images']}
     for label in project['labels']:

@@ -162,5 +162,5 @@ def test_unresponsive_cancelled_worker_has_a_bounded_grace_period(monkeypatch):
 def test_auxiliary_label_geometry_is_validated_before_indexing(field,geometry):
     from geoforma.project_validation import validate_label
     label=dict(record('invalid',box(0,0,10,10)),**{field:geometry})
-    with pytest.raises(ValueError,match='多边形'):
+    with pytest.raises(ValueError,match='旧轮廓字段'):
         validate_label(label,{'one'})

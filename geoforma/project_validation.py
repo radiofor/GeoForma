@@ -5,6 +5,8 @@ from .label_validation import validate_label,validate_stroke
 
 def validate_project(project):
     if not isinstance(project,dict) or type(project.get('schema')) is not int or project['schema']!=1:raise ValueError('不支持的项目版本。')
+    from .label_validation import reject_project_legacy_geometry
+    reject_project_legacy_geometry(project)
     if 'export_crs_fixed' in project:raise ValueError('项目包含不支持的导出设置。')
     from .project_cache import OWNER_PATTERN
     if not isinstance(project.get('cache_id'),str) or not OWNER_PATTERN.fullmatch(project['cache_id']):raise ValueError('项目缓存标识无效。')

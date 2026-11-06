@@ -66,6 +66,26 @@ def saved(w,app):
     until(app,lambda:not w.dirty and w.autosave_task is None and not w.project_saves.pending)
 
 
+def test_autosave_succeeds_silently_without_replacing_other_messages(automatic_project,monkeypatch):
+    w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch)
+    w.statusBar().showMessage('其他操作的消息')
+    w.project['classes'][0]['name']='保存后的类别';w.mark_dirty();w.autosave()
+    assert 'autosave' not in w.background_activity.entries
+    saved(w,app)
+    assert w.statusBar().currentMessage()=='其他操作的消息'
+    assert load_project(path)['classes'][0]['name']=='保存后的类别'
+
+
+def test_autosave_unavailable_resource_directory_shows_failure(automatic_project,monkeypatch,raster_image):
+    w,app,_=automatic_project
+    def unavailable():raise OSError('unavailable')
+    monkeypatch.setattr('geoforma.resource_location.current_resource_dir',unavailable)
+    w.project['images']=[raster_image];w.mark_dirty()
+    assert w.autosave() is False
+    assert '自动保存未完成' in w.statusBar().currentMessage()
+    assert w.dirty and w.autosave_task is None
+
+
 def block_first_write(monkeypatch):
     started=threading.Event();release=threading.Event();written=[]
     def write(project,path,**kwargs):

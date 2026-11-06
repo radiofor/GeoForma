@@ -28,7 +28,7 @@ class ModelWorkflow:
             if not self.project['images'] and self.image is None:return
             if value!=getattr(self,'prepared_model_config',None) or not Path(value['checkpoint']).is_file():
                 def done(result):
-                    self.project['model']['checkpoint']=result['checkpoint'];self.prepared_model_config=copy.deepcopy(self.project['model']);self.record_runtime(result);self.mark_dirty()
+                    self.project['model']['checkpoint']=result['checkpoint'];self.prepared_model_config=copy.deepcopy(self.project['model']);self.record_runtime(result);self.mark_dirty(background=True)
                     self.remember_current_model()
                     self.log_message(ui_text('models.done.002')+result['device']+' · '+result['checkpoint'])
                     self.queue_preparation()

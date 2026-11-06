@@ -82,14 +82,17 @@ def test_multiple_types_switch_only_basemap_and_restore_partial_matches(workbenc
         assert w.view.capture_navigation()==navigation and image_snapshot(base)==before
     w.capture_workspace();save_project(w.project,w.project_path);loaded=load_project(w.project_path)
     assert len(loaded['references'])==2
-    w.images.setCurrentRow(1);QTest.qWait(180);app.processEvents()
+    w.images.setCurrentRow(1)
+    deadline=time.monotonic()+4
+    while w.image is not other and time.monotonic()<deadline:QTest.qWait(5);app.processEvents()
+    assert w.image is other, (getattr(w,'_image_switch_task',None),w.dirty_revision,w.images.currentRow())
     assert not w.reference_switches.isVisible() and w.main_image_button.isVisible() and w.display_reference is None
     QTest.qWait(20);app.processEvents();w.images.setCurrentRow(0)
     assert w.reference_switches.isVisible() and w.display_reference is None
     assert not reports and not errors
 
 
-def test_reference_frame_replacement_is_atomic_without_fade(workbench,monkeypatch):
+def test_reference_overview_starts_transition_without_waiting_for_detail(workbench,monkeypatch):
     import numpy as np
     from geoforma.controllers.display import DisplayWorkflow
     w,app,wait,errors=workbench;w.show();app.processEvents()
@@ -99,8 +102,13 @@ def test_reference_frame_replacement_is_atomic_without_fade(workbench,monkeypatc
     def show(*args):
         observed.append(w.view.viewport().updatesEnabled());return original(*args)
     monkeypatch.setattr(w.view,'show_raster',show)
+    requests=[];monkeypatch.setattr(w,'request_render',lambda *args:requests.append(args))
     DisplayWorkflow.apply_raster(w,(np.full((4,4,3),42,np.uint8),np.ones((4,4),bool)),[0,0,20,20],True)
-    assert observed==[False] and w.view.viewport().updatesEnabled()
+    assert observed==[False] and not w.reference_transition_pending
+    assert w.visible_reference is w.display_reference and w.view.base_item.pixmap().toImage().pixelColor(0,0).red()==42
+    app.processEvents();assert requests==[()]
+    DisplayWorkflow.apply_raster(w,(np.full((4,4,3),45,np.uint8),np.ones((4,4),bool)),[0,0,10,10],False)
+    assert observed==[False,False] and w.view.viewport().updatesEnabled()
     assert not w.reference_transition_pending and w.visible_reference is w.display_reference
     assert w.view.base_item.opacity()==1 and not hasattr(w.view.layers,'raster_fade') and not errors
 

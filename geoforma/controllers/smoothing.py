@@ -1,15 +1,14 @@
 """Mode-local smoothing previews leave canonical pixel contours and undo data intact."""
-from ..smoothing import settings,smooth_batch
+from ..smoothing import settings
 
 
 class SmoothingWorkflow:
-    def retain_reshape_smoothing(self,replacements,updated_draft):
+    def retain_reshape_smoothing(self,replacements):
         """Keep the displayed smooth outlines until the new outlines are ready."""
         config=settings(self.project,self.annotation_mode())
-        if not config['enabled'] or not self.image:
+        if not (config['enabled'] or self.fill_holes.isChecked()) or not self.image:
             self._reshape_smoothing_hold=None;return
         expected={part['id']:part['geometry'] for parts in replacements.values() for part in parts}
-        if updated_draft is not None:expected['__draft']=updated_draft['geometry']
         if not expected:return
         last=self.smoother.last;old={}
         if last and last[0][:3]==self.smoothing_key([])[:3]:old={record['id']:record for record in last[2]}
@@ -23,14 +22,25 @@ class SmoothingWorkflow:
                 retained[identifier]={'geometry':geometry,'_bounds':[bounds.left(),bounds.top(),bounds.right(),bounds.bottom()],
                                       '_render_path':path,'_source_geometry':geometry,'_source_path':path}
             else:retained[identifier]=None
-        draft_id=(updated_draft.get('base_id') or next(iter(updated_draft.get('display_ids',[])),None)) if updated_draft is not None else None
-        self._reshape_smoothing_hold=(self.annotation_context(),config['value'],expected,retained,draft_id)
+        self._reshape_smoothing_hold=(self.annotation_context(),(config['enabled'],config['value'],self.fill_holes.isChecked()),expected,retained)
+
+    def presentation_options_changed(self):
+        """Switch the current representation without touching source geometry."""
+        self._presentation_failed_context=None
+        from ..rendering.label_transition import LabelTransition
+        transition=getattr(self.view,'label_transition',None)
+        if transition is None:
+            transition=LabelTransition(self.view);self.view.label_transition=transition
+        previous=transition.capture();self._presentation_transition_pending=True
+        self._presentation_transition_context=self.annotation_context()
+        self.redraw()
+        if getattr(self,'_presentation_ready',True):
+            self._presentation_transition_pending=False;transition.reveal(previous)
 
     def smoothing_changed(self):
         if self.restoring_project:return
         self.project.setdefault('smoothing',{})[self.annotation_mode()]={'enabled':self.smooth_enabled.isChecked(),'value':self.smooth_value.value()}
-        if not self.smooth_enabled.isChecked():self.smoother.stop()
-        self.mark_dirty();self.redraw();self.update_controls()
+        self.mark_dirty();self.presentation_options_changed();self.update_controls()
 
     def sync_smoothing_controls(self):
         config=settings(self.project,self.annotation_mode())
@@ -40,47 +50,51 @@ class SmoothingWorkflow:
                 if control.isChecked()!=value:control.setChecked(value)
             elif control.value()!=value:control.setValue(value)
             control.blockSignals(blocked)
-        self.smooth_enabled.setEnabled(self.reshape_session is None and not self.closing)
+        self.smooth_enabled.setEnabled(not self.foreground_task_active() and not self.closing)
         self.smooth_value.setEnabled(config['enabled'] and self.smooth_enabled.isEnabled())
 
-    def smoothing_sources(self,labels,draft):
+    def smoothing_sources(self,draft):
         # Include hidden confirmed labels so a display filter cannot change topology.
-        if self.label_index:
+        current=self.current_labels()
+        if self.label_index and self.label_index_key==self.label_index_signature(current):
             saved=self.label_index.visible({})
-            live={l['id'] for l in self.current_labels()};sources=[l for l in saved if l['id'] in live]
-        else:sources=list(labels)
-        from ..editing_state import batch_labels
-        sources=batch_labels(sources,self.draft)
-        base=self.draft.get('base_id')
-        if draft:
-            sources=[l for l in sources if l['id']!=base]
-            sources.append({'id':'__draft','geometry':draft,'box':self.draft.get('box'),'status':'draft','editing_state':self.draft.get('editing_state','model'),
-                'model':{'single_polygon':self.mode_index==0 and self.single_polygon.isChecked()}})
-        return sources
+            live={l['id'] for l in current};sources=[l for l in saved if l['id'] in live]
+        else:sources=list(current)
+        from ..smoothing import smoothing_sources
+        return smoothing_sources(sources,self.draft,draft)
 
     def smooth_display(self,labels,draft):
         config=settings(self.project,self.annotation_mode())
-        if not config['enabled'] or not self.image:
+        if getattr(self,'_presentation_transition_pending',False) and getattr(self,'_presentation_transition_context',None)!=self.annotation_context():
+            self._presentation_transition_pending=False
+        fill=self.fill_holes.isChecked();self._presentation_ready=True
+        if not (config['enabled'] or fill) or not self.image:
             self._reshape_smoothing_hold=None;self.smoother.stop();return labels,draft
-        sources=self.smoothing_sources(labels,draft)
-        if not sources:return labels,draft
+        sources=self.smoothing_sources(draft)
+        if not sources:
+            # A previous image may still be smoothing; do not spend CPU on a
+            # result that cannot be displayed in the now-empty context.
+            self._presentation_transition_pending=False;self._reshape_smoothing_hold=None;self.smoother.stop();return labels,draft
+        if not config['enabled'] and fill:
+            from ..hole_filling import has_holes
+            if not any(has_holes(label['geometry']) for label in sources):
+                self._reshape_smoothing_hold=None;self.smoother.stop();return labels,draft
         key=self.smoothing_key(sources)
         hold=getattr(self,'_reshape_smoothing_hold',None)
         if hold:
             live={label['id']:label['geometry'] for label in self.current_labels()}
-            if self.draft.get('geometry'):live['__draft']=self.draft['geometry']
-            if hold[0]!=self.annotation_context() or hold[1]!=config['value']:
+            if hold[0]!=self.annotation_context() or hold[1]!=(config['enabled'],config['value'],fill):
                 self._reshape_smoothing_hold=None;hold=None
             else:
-                expected=dict(hold[2]);retained=dict(hold[3]);draft_id=hold[4]
-                if '__draft' in expected and '__draft' not in live and draft_id in live:
-                    expected[draft_id]=live[draft_id];retained[draft_id]=retained['__draft']
+                expected=dict(hold[2]);retained=dict(hold[3])
                 expected={identifier:live[identifier] for identifier in expected if identifier in live}
                 retained={identifier:retained[identifier] for identifier in expected}
-                hold=(hold[0],hold[1],expected,retained,draft_id) if expected else None
+                hold=(hold[0],hold[1],expected,retained) if expected else None
                 self._reshape_smoothing_hold=hold
-        image={k:self.image[k] for k in ('width','height','path','model_recipe') if k in self.image}
-        result=self.smoother.request(key,sources,lambda task:smooth_batch(sources,config['value'],image,task,self.smoother.geometry_cache))
+        image={k:self.image[k] for k in ('width','height') if k in self.image}
+        from ..label_presentation import presentation_batch
+        result=self.smoother.request(key,sources,lambda task:presentation_batch(sources,fill,config,image,task,self.smoother.geometry_cache),immediate=bool(getattr(self,'_presentation_transition_pending',False)))
+        self._presentation_ready=result is not None
         source_geometry={label['id']:label['geometry'] for label in sources}
         if hold and result is not None and all(source_geometry.get(i) is geometry for i,geometry in hold[2].items()):
             self._reshape_smoothing_hold=None;hold=None
@@ -97,7 +111,6 @@ class SmoothingWorkflow:
                 if record is None:derived.pop(identifier,None)
                 else:derived[identifier]=record
             labels=[label for label in labels if label['id'] not in hold[2] or label['id'] in derived]
-            if '__draft' in hold[2] and '__draft' not in derived:draft=None
         target=derived.get('__draft')
         if target:
             for geometry,path in ((target['geometry'],target['_render_path']),(target['_source_geometry'],target['_source_path'])):
@@ -106,12 +119,25 @@ class SmoothingWorkflow:
 
     def smoothing_key(self,sources):
         config=settings(self.project,self.annotation_mode())
-        return (self.annotation_context(),config['value'],(self.image.get('fingerprint'),id(self.image.get('model_recipe')),self.image['width'],self.image['height']),tuple((l['id'],id(l['geometry']),tuple(l.get('box') or ()),l.get('status'),l.get('editing_state','model'),l.get('model',{}).get('single_polygon')) for l in sources))
+        return (self.annotation_context(),config['value'],(self.image['width'],self.image['height']),config['enabled'],self.fill_holes.isChecked(),tuple((l['id'],id(l['geometry']),l.get('status')) for l in sources))
 
     def smoothing_updated(self):
-        if not self.closing:self.redraw();self.update_controls()
+        if self.closing:return
+        self._presentation_failed_context=None
+        transition=getattr(self.view,'label_transition',None)
+        pending=(getattr(self,'_presentation_transition_pending',False) and
+                 getattr(self,'_presentation_transition_context',None)==self.annotation_context())
+        if not pending:self._presentation_transition_pending=False
+        previous=transition.capture() if pending and transition is not None else None
+        self.redraw()
+        if previous is not None and getattr(self,'_presentation_ready',False):
+            self._presentation_transition_pending=False;transition.reveal(previous)
+        self.update_controls()
 
     def smoothing_error(self,message):
-        self._reshape_smoothing_hold=None
+        if (getattr(self,'_presentation_transition_pending',False) and
+            getattr(self,'_presentation_transition_context',None)==self.annotation_context()):
+            self._presentation_failed_context=self.annotation_context()
+        self._presentation_transition_pending=False;self._reshape_smoothing_hold=None
         self.log_message(message);self.statusBar().showMessage('平滑处理失败，请减小平滑值或关闭平滑。',5000)
-        self.redraw()
+        self.redraw();self.update_controls()

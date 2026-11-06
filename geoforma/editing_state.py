@@ -1,6 +1,8 @@
 """Persisted per-label manual editing policy."""
 import copy
 from datetime import datetime
+
+MANUAL_PROMPT_LOCK_MESSAGE='当前轮廓已人工编辑，请取消编辑后新建标注。'
 def manual_label(label):return bool(label and label.get('editing_state')=='manual')
 
 
@@ -31,7 +33,7 @@ def batch_labels(labels,draft):
     return result
 
 def require_model_editable(request):
-    if request.get('editing_state')=='manual':raise ValueError('人工编辑的标签不能重新运行 SAM，请先撤销人工修改。')
+    if request.get('editing_state')=='manual':raise ValueError(MANUAL_PROMPT_LOCK_MESSAGE)
 
 
 def draft_snapshot(draft):
@@ -42,21 +44,13 @@ def geometry_history(undo,redo):
     return any(stack and '_draft' in stack[-1] for stack in (undo,redo))
 
 
-def label_draft(label,class_id):
-    """Detach mutable prompts from the saved record before staging an edit."""
-    return {'base_id':label['id'],'geometry':label['geometry'],'seed_geometry':label['geometry'],
-        'window':copy.deepcopy(label.get('window')),'points':copy.deepcopy(label.get('points') or []),
-        'box':copy.deepcopy(label.get('box')),'edge':label.get('edge',False),'score':label.get('score'),
-        'model_metadata':copy.deepcopy(label.get('model',{})),'editing_state':label.get('editing_state','model'),
-        'manual_edits':copy.deepcopy(label.get('manual_edits',[])),'class_id':label.get('class_id') or class_id,
-        'source':label.get('source','interactive')}
-
-
-def stage_manual_edit(draft,result):
-    """Replace immutable geometry and provenance; never persist or invoke a model."""
-    staged={k:v for k,v in draft.items() if k not in ('logits','choices')}
-    staged.update(geometry=result['geometry'],editing_state='manual',edge=False,pending=False)
-    staged['manual_edits']=[*draft.get('manual_edits',[]),{'tool':'raster_reshape','stroke':copy.deepcopy(result['stroke']),
+def reshaped_label(label,result):
+    """Build a detached saved label without copying the superseded contour."""
+    transient=('geometry','_bounds','_render_path','_source_geometry','_source_path',
+               'raw_geometry','source_geometry','smoothing_applied','seed_geometry')
+    updated=copy.deepcopy({key:value for key,value in label.items() if key not in transient})
+    updated.update(geometry=result['geometry'],editing_state='manual',edge=False)
+    updated['manual_edits']=[*updated.get('manual_edits',[]),{'tool':'raster_reshape','stroke':copy.deepcopy(result['stroke']),
         'alternate':result['alternate'],'window':list(result['window']),'added_pixels':result['added_pixels'],
         'removed_pixels':result['removed_pixels'],'at':datetime.now().isoformat()}]
-    return staged
+    return updated

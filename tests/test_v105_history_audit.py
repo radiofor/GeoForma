@@ -99,7 +99,7 @@ def test_cancel_after_result_before_finished_does_not_stage_a_reshape(workbench,
     w.begin_reshape(auto=auto);w.reshape_session['stroke']=copy.deepcopy(OUT)
     def run(title,work,done,**options):
         token=SimpleNamespace(cancel_event=Event());w.task=token;w.task_kind='reshape'
-        done([result] if auto else result);token.cancel_event.set();w.task=None;w.task_kind=None
+        done(([('label',dict(before[0]))],[result]) if auto else result);token.cancel_event.set();w.task=None;w.task_kind=None
         options['on_finished']()
     monkeypatch.setattr(w,'run',run);w.finish_reshape()
     assert not w.draft and w.project['labels']==before

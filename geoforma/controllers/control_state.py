@@ -21,8 +21,10 @@ class ControlState:
         controls.enable(self.single_polygon,not busy)
         controls.enable(self.fill_holes,not busy)
         for action in self.actions_to_lock:controls.enable(action,not physical_busy)
-        controls.enable(self.import_button,not physical_busy);controls.enable(self.images,browse);controls.enable(self.model_button,not physical_busy)
-        controls.enable(self.import_reference_button,not physical_busy and self.reshape_session is None)
+        controls.enable(self.import_button,not physical_busy)
+        controls.enable(self.images,browse or self.task is not None and self.task_kind=='reshape' and not locked)
+        controls.enable(self.model_button,not physical_busy)
+        controls.enable(self.import_reference_button,not physical_busy)
         self.sync_reference_buttons()
         for button in [self.bands_button,self.crs_button]:controls.enable(button,has and not physical_busy)
         controls.enable(self.fit_action,has and not locked);controls.enable(self.native_zoom_action,has and not locked)
@@ -36,27 +38,23 @@ class ControlState:
         controls.enable(self.confirm_button,bool(self.draft.get('geometry')) and not self.draft.get('pending',False) and not busy and self.classes.currentData() is not None)
         controls.enable(self.classes_button,not busy)
         controls.enable(self.classes,not busy)
-        saved_selection=not self.draft and self.selected_label() and self.selected_label()['status']=='confirmed'
+        selected_label=self.selected_label() if not self.draft else None
+        saved_selection=selected_label and selected_label['status']=='confirmed'
         self.confirm_button.setText('已保存' if saved_selection else ui_text('action.confirm'))
         eligible=self.can_apply_current()
         controls.enable(self.apply_button,ready and not busy and eligible and not self.auto_apply.isChecked() and bool(self.draft.get('pending') or self.draft.get('points') or self.draft.get('box')))
         self.apply_button.setToolTip(ui_text('control_state.update_controls.009') if not eligible else ui_text('control_state.update_controls.010'))
         prompt_busy=self.prompt_task_busy()
         controls.enable(self.delete_points_button,bool(self.selected_points) and not prompt_busy)
-        controls.enable(self.new_target_button,bool(self.draft or self.reshape_session) and not busy)
-        prompt_busy=self.prompt_task_busy()
+        controls.enable(self.new_target_button,bool(self.draft) and not busy)
         controls.enable(self.clear_points_button,eligible and ready and not prompt_busy and bool(self.draft.get('points')))
         controls.enable(self.undo_prompt_action,not prompt_busy and bool(self.prompt_undo if self.prompt_context() else self.label_undo))
         controls.enable(self.redo_prompt_action,not prompt_busy and bool(self.prompt_redo if self.prompt_context() else self.label_redo))
         controls.enable(self.undo_label_action,bool(self.label_undo or self.prompt_undo and '_label_entries' in self.prompt_undo[-1]) and not busy)
-        controls.enable(self.zoom_button,len(self.selected_ids)==1 and browse)
-        controls.enable(self.delete_button,bool(self.selected_ids or self.draft.get('base_id')) and not busy)
         controls.enable(self.delete_action,bool(self.selected_points) and not prompt_busy or not busy and bool(self.selected_ids or self.draft.get('base_id')))
         loading=self.progress_presentation.loading_active
         controls.enable(self.cancel_button,self.progress.model.state.can_cancel and (physical_busy or bool(loading and self.loading_task and not self.loading_task.cancel_event.is_set())))
         self.cancel_button.setText(ui_text('control_state.update_controls.011') if self.task_kind=='preparation' else ui_text('control_state.update_controls.012'))
-        available=bool(self.label_presenter.rows)
-        controls.show(self.review_navigation,True);controls.enable(self.previous_button,available and not busy);controls.enable(self.next_button,controls.is_enabled(self.previous_button))
         if not busy:
             names={'queued':ui_text('control_state.update_controls.013'),'preparing':ui_text('control_state.update_controls.014'),'paused':ui_text('control_state.update_controls.015'),'failed':ui_text('control_state.update_controls.016'),'bands_required':ui_text('control_state.update_controls.017')}
             self.state_label.setText(ui_text('control_state.update_controls.021') if ready else names.get(state,ui_text('control_state.update_controls.025') if not has else ui_text('control_state.update_controls.013')))
@@ -65,9 +63,8 @@ class ControlState:
             self.state_label.setText(task_name(self.task_kind or self.progress.model.state.kind))
         set_tone(self.state_label,'busy' if busy else ('error' if state=='failed' else 'warning' if state in ['paused','bands_required'] else 'ready' if ready else 'idle'))
         self.update_reshape_controls(controls)
-        for row in range(self.labels_table.rowCount()):
-            combo=self.labels_table.cellWidget(row,1)
-            if combo:controls.enable(combo,not busy and self.reshape_session is None)
+        selected=next((row for row in self.label_presenter.rows if row.identifier==self.selected_id),None) if len(self.selected_ids)==1 else None
+        self.category_buttons.sync(self.project['classes'],selected.class_id if selected else None,bool(selected) and not busy)
         self.sync_manual_polygon()
         if self.draft.get('manual_vertices'):
             controls.enable(self.undo_prompt_action,not busy);controls.enable(self.redo_prompt_action,not busy and bool(self.prompt_redo))

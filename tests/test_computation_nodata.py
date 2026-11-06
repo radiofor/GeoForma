@@ -77,26 +77,19 @@ def test_sam_output_geometry_excludes_invalid_pixels():
     assert polygon.area==91 and not polygon.covers(Point(5,4)) and polygon.covers(Point(1,1))
 
 
-def test_smoothing_cannot_expand_a_model_label_into_missing_pixels(tmp_path,monkeypatch):
+@pytest.mark.parametrize('status,manual',[('draft',False),('confirmed',False),('confirmed',True)])
+def test_smoothing_ignores_nodata_and_historical_model_settings(tmp_path,monkeypatch,status,manual):
     from shapely.geometry import box,mapping
     from geoforma import smoothing
     image,_=reference(tmp_path);image['model_recipe']=make_recipe(image,[1,1,1])
-    original=box(20,5,38,35).difference(box(26,10,34,30))
-    label={'id':'target','image_id':image['id'],'status':'confirmed','geometry':mapping(original)}
+    original=box(20,5,30,35)
+    label={'id':'target','image_id':image['id'],'status':status,'geometry':mapping(original),
+           'box':[20,5,30,35],'model':{'single_polygon':True}}
+    if manual:label['editing_state']='manual'
     monkeypatch.setattr(smoothing,'_smooth_shape',lambda *args:box(20,5,38,35))
-    result=smoothing.smooth_batch([label],1,image)[0]
-    assert not shape(result['geometry']).covers(Point(30,20))
-
-
-def test_manual_smoothing_handles_image_without_model_bands(tmp_path,monkeypatch):
-    from shapely.geometry import box,mapping
-    from geoforma import smoothing
-    image,_=reference(tmp_path);image['model_recipe']=None;image['display_recipe']=None
-    original=box(20,5,38,35).difference(box(26,10,34,30))
-    label={'id':'target','image_id':image['id'],'status':'confirmed','geometry':mapping(original)}
-    monkeypatch.setattr(smoothing,'_smooth_shape',lambda *args:box(20,5,38,35))
-    result=smoothing.smooth_batch([label],1,image)[0]
-    assert not shape(result['geometry']).covers(Point(30,20))
+    result=shape(smoothing.smooth_batch([label],1,image)[0]['geometry'])
+    without_raster=shape(smoothing.smooth_batch([dict(label,box=None,model={})],1,{'width':40,'height':40})[0]['geometry'])
+    assert result.equals(without_raster) and result.covers(Point(28,20)) and result.covers(Point(32,20))
 
 
 @pytest.mark.parametrize('manual',[False,True])

@@ -27,6 +27,8 @@ class ImageView(ViewNavigation,QGraphicsView):
     def __init__(self,parent=None):
         super().__init__(parent);self.setScene(QGraphicsScene(self));self.mode='pan';self.selected_mode='pan';self.raster_rect=QRectF()
         self.layers=SceneLayers(self);self.drag_start=None;self.rubber=None;self.drag_pixel=None;self.drag_add=False
+        from .rendering.frame_transition import FrameTransition
+        self.frame_transition=FrameTransition(self)
         self.middle_drag=None
         self.pan_press=None
         self.reshape_enabled=False;self.reshape_picking=False;self.reshape_points=[];self.reshape_items=[];self.polygon_fill=None
@@ -60,7 +62,22 @@ class ImageView(ViewNavigation,QGraphicsView):
         self.setCursor(Qt.CursorShape.OpenHandCursor if mode=='pan' else Qt.CursorShape.CrossCursor)
 
     def set_image(self,width,height):
+        self.frame_transition.cancel()
+        transition=getattr(self,'label_transition',None)
+        if transition is not None:transition.cancel()
         self.scene().clear();self.layers.reset(keep_paths=True);self.rubber=None
+        self._set_image_bounds(width,height)
+
+    def switch_image(self,width,height):
+        # Retain bounded hidden annotation layers for quick returns. Transient
+        # tools and raster layers must never carry over to another image.
+        transition=getattr(self,'label_transition',None)
+        if transition is not None:transition.cancel()
+        if self.rubber is not None:self.scene().removeItem(self.rubber);self.rubber=None
+        self.clear_reshape();self.layers.prepare_image_switch()
+        self._set_image_bounds(width,height)
+
+    def _set_image_bounds(self,width,height):
         self.reshape_points=[];self.reshape_items=[];self.reshape_enabled=False;self.polygon_fill=None
         self.raster_rect=QRectF(0,0,width,height);self.scene().setSceneRect(self.raster_rect);self.setSceneRect(self.raster_rect);self.fit_image()
         self.empty.setVisible(width==0 or height==0)

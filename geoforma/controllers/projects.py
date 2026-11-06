@@ -29,8 +29,9 @@ class ProjectWorkflow:
         if path:self.request_project_open(path,recover_latest=True)
         else:self.statusBar().showMessage(ui_text('project.no_recovery'),3000);self.update_controls()
 
-    def mark_dirty(self):
+    def mark_dirty(self,*,background=False):
         self.dirty=True;self.dirty_revision+=1
+        if not background:self.state.interaction_revision+=1
         timer=getattr(self,'autosave_debounce',None)
         if timer is not None and not self.closing and not self.restoring_project:timer.start()
 
@@ -75,6 +76,7 @@ class ProjectWorkflow:
         except (OSError,ValueError,RuntimeError):pending=True
         if pending or getattr(getattr(self,'resource_dialog',None),'migration_active',False):
             self.log_message('资源迁移未完成，自动保存暂不可用。请先继续迁移。')
+            self.statusBar().showMessage('资源迁移未完成，自动保存暂不可用。请先继续迁移。',10000)
             if self.closing:
                 self.abort_shutdown();QMessageBox.warning(self,'自动保存未完成','请先完成资源迁移，再关闭 GeoForma。')
             return False
@@ -88,6 +90,7 @@ class ProjectWorkflow:
             except (OSError,ValueError,RuntimeError):path=None
             if path is None:
                 self.log_message(ui_text('projects.autosave_unavailable'))
+                self.statusBar().showMessage(ui_text('projects.autosave_unavailable'),10000)
                 if self.closing:
                     self.abort_shutdown();QMessageBox.warning(self,ui_text('projects.failed.007'),ui_text('projects.failed.008'))
                 return False
@@ -111,27 +114,23 @@ class ProjectWorkflow:
         if request is None:return
         from ..resource_location import require_resource_dir
         path=request.path;original_path=request.project_path
-        cache=self.smoother.geometry_cache if request.epoch==self.project_epoch else None
-        cache_epoch=cache.snapshot() if cache is not None else None
         def save_snapshot(t):
             if original_path is None and require_resource_dir()!=path.parent.parent:raise RuntimeError('资源目录已更改，自动保存已取消。')
             if original_path is not None:
                 if not original_path.is_file():raise RuntimeError('项目文件不存在或已移动，自动保存已暂停；请先将项目文件移回原位置。')
-                save_project(request.snapshot,original_path,smoothing_cache=cache,cache_epoch=cache_epoch)
-            else:save_project(request.snapshot,path,smoothing_cache=cache,cache_epoch=cache_epoch)
+                save_project(request.snapshot,original_path)
+            else:save_project(request.snapshot,path)
         task=Task(save_snapshot);self.autosave_task=task
-        self.background_activity.set('autosave','自动保存',request.title,task)
         def saved(_):
             self.project_saves.saved(request.destination,request.order)
             if request.epoch==self.project_epoch and self.project_path==original_path:
                 self.settings.setValue('recovery/last_work',str(original_path or path))
                 if request.revision==self.dirty_revision:
-                    self.dirty=False;self.statusBar().showMessage(ui_text('projects.saved.003' if original_path else 'projects.recovery_saved'),2000)
+                    self.dirty=False
                 self.update_controls()
         def finished():
             self.autosave_task=None
             self.project_saves.complete()
-            self.background_activity.set('autosave','')
             if not self.closing:self.update_controls()
             if self.project_saves.pending:QTimer.singleShot(0,self.start_next_autosave)
             elif self.closing:QTimer.singleShot(0,self.close)
@@ -162,8 +161,7 @@ class ProjectWorkflow:
             # The visible action is used only for the first save. Keep this
             # synchronous API safe for existing automation as well.
             self.storage_pool.waitForDone()
-            cache=self.smoother.geometry_cache
-            save_project(snapshot,path,smoothing_cache=cache,cache_epoch=cache.snapshot());self.project_saves.saved(path,order)
+            save_project(snapshot,path);self.project_saves.saved(path,order)
             if first_save:
                 # The saved snapshot supersedes queued recovery writes for this
                 # workspace; no later edit can occur while this method blocks.
@@ -176,14 +174,15 @@ class ProjectWorkflow:
                     discard_saved_untitled(current_resource_dir(),self.project.get('cache_id'))
                 except (OSError,ValueError,RuntimeError):
                     self.log_message('项目已保存，但未能清理未命名项目的恢复记录。')
-            self.project_path=path;self.dirty=False;self.refresh_project_title();self.log_message(ui_text('projects.save.009')+str(path));self.settings.setValue('last_project',str(path));self.settings.setValue('recovery/last_work',str(path));self.update_controls()
+            self.project_path=path;self.dirty=False;self.refresh_project_title();self.log_message(ui_text('projects.save.009')+str(path));self.settings.setValue('recovery/last_work',str(path));self.update_controls()
         except Exception:self.error(traceback.format_exc())
 
     def new(self):
-        if not can_start_operation(self) or self.reshape_session is not None:return
+        if not can_start_operation(self):return
         self.remember_current_model()
         if self.label_index_task:self.label_index_task.cancel()
         if self.autosave() is False:return
+        self.interrupt_reshape()
         self.smoother.clear();self.project_epoch+=1;self.preparation.reset();self.image_sessions.clear();self.project=new_project(last_model(self.settings));self.project_path=None;self.image=None;self.draft={};self.label_undo=[];self.label_redo=[];self.prompt_undo=[];self.prompt_redo=[];self.selected_id=None;self.selected_ids.clear();self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation,clear_cache=True);self.view.set_image(0,0);self.refresh_classes();self.refresh_images();self.refresh_labels();self.update_draft_info();self.update_controls();self.refresh_project_title();self.dirty=False
         self.mode_histories.clear();self.auto_apply.setChecked(True)
         self.single_polygon.setChecked(self.project['workspace']['single_polygon'])
@@ -202,7 +201,7 @@ class ProjectWorkflow:
 
     def open_project(self,path,recover_latest=False,_loaded=None):
         """Synchronous API; UI entry points prepare in the background before committing."""
-        if self.task or self.reshape_session is not None or self.closing:return False
+        if self.task or self.closing:return False
         from ..resource_migration import pending_migration
         try:pending=bool(pending_migration())
         except (OSError,ValueError,RuntimeError):pending=True
@@ -232,6 +231,7 @@ class ProjectWorkflow:
             if not _loaded.cache_cleared and not hasattr(_loaded,'reconciled_caches'):
                 from ..cache_recovery import reconcile_prepared
                 _loaded.reconciled_caches=reconcile_prepared(_loaded.project,cache_root,self.service.cache_revision)
+            self.interrupt_reshape()
             return self.commit_project(_loaded,path)
         except Exception:
             self.restoring_project=False;self.error(traceback.format_exc());return False

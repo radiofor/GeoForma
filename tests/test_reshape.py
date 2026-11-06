@@ -19,11 +19,13 @@ def test_raster_reshape_expands_and_cuts(stroke,area,added,removed):
     assert result['added_pixels']==added and result['removed_pixels']==removed
 
 
-def test_diagonal_stroke_creates_integer_grid_edges_without_changing_other_boundary():
-    result=reshape_patch(reshape_intent(G,[[22,28],[23.2,34.3],[28,28]]),{'width':100,'height':100})
-    g=shape(result['geometry']);coords=list(g.exterior.coords)
-    assert all(float(x).is_integer() and float(y).is_integer() for x,y in coords)
-    assert all(a[0]==b[0] or a[1]==b[1] for a,b in zip(coords,coords[1:]))
+def test_diagonal_stroke_preserves_vector_edges_without_changing_other_boundary():
+    stroke=[[22,28],[23.2,34.3],[28,28]]
+    intent=reshape_intent(G,stroke)
+    result=reshape_patch(intent,{'width':100,'height':100})
+    g=shape(result['geometry'])
+    assert g.equals(shape(intent['candidate']))
+    assert g.boundary.distance(Point(23.2,34.3))<1e-10
     assert g.intersection(box(0,0,100,29)).equals(shape(G).intersection(box(0,0,100,29)))
 
 
@@ -47,7 +49,7 @@ def test_full_pixel_box_nodata_and_existing_labels_limit_additions():
     valid[max(0,31-y),:]=False
     blocker=mapping(box(26,30,28,34))
     result=reshape_patch(intent,{'width':100,'height':100},valid,[blocker],[20,20,30,33.75])
-    g=shape(result['geometry']);assert g.bounds[3]<=33 and g.intersection(shape(blocker)).area==0
+    g=shape(result['geometry']);assert g.bounds[3]==pytest.approx(33.75) and g.intersection(shape(blocker)).area==0
     assert g.intersection(box(0,31,100,32)).area==0
 
 
@@ -57,6 +59,19 @@ def test_single_polygon_and_alternate_boundary_are_explicit():
     assert result['geometry']['type']=='Polygon'
     smaller=reshape_patch(reshape_intent(G,IN,True),{'width':100,'height':100})
     assert shape(smaller['geometry']).area==12
+
+
+def test_single_polygon_reshape_ignores_old_model_points(workbench):
+    w,app,_=workbench
+    w.single_polygon.setChecked(True);w.smooth_enabled.setChecked(False)
+    w.project['labels'][0]['geometry']=mapping(MultiPolygon([box(20,20,30,30),box(60,60,64,64)]))
+    w.project['labels'][0]['points']=[[62,62,1]];w.refresh_labels()
+    w.begin_reshape(auto=True)
+    for x,y in OUT:w.add_reshape_point(x,y)
+    w.finish_reshape();deadline=time.monotonic()+8
+    while w.task and time.monotonic()<deadline:app.processEvents();time.sleep(.002)
+    assert w.task is None and w.reshape_session is None
+    assert shape(w.project['labels'][0]['geometry']).bounds==(20,20,30,34)
 
 
 @pytest.fixture
@@ -129,6 +144,8 @@ def test_manual_reshape_is_saved_beyond_earlier_prompt_box(workbench):
 
 def test_repeated_manual_edits_need_all_undos_before_unlock(workbench):
     w,app,tmp=workbench;prepare_preview(w);w.commit_reshape();w.confirm()
+    from test_smoothing import settled
+    settled(w,app)
     # A second cut crosses the side not changed by the first edit.
     stroke=[[18,22],[22,22],[22,28],[18,28]];prepare_preview(w,stroke);w.commit_reshape();w.confirm()
     assert len(w.project['labels'][0]['manual_edits'])==2
@@ -182,7 +199,7 @@ def test_mouse_drawing_backspace_preview_and_save(workbench):
     from PySide6.QtCore import Qt,QPointF
     from PySide6.QtTest import QTest
     w,app,tmp=workbench;w.show();app.processEvents();w.view.fit_image();w.render_timer.stop()
-    w.reshape_button.click();assert w.reshape_session and w.reshape_group.isVisible()
+    w.reshape_button.click();assert w.reshape_session and w.mode_settings.currentWidget() is w.prompt_group
     assert w.mode_actions['positive'].isEnabled()
     for x,y in OUT:
         p=w.view.mapFromScene(QPointF(x,y));QTest.mouseClick(w.view.viewport(),Qt.MouseButton.LeftButton,pos=p)

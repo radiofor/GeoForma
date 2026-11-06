@@ -51,9 +51,9 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
         self.runtime_hardware=(getattr(startup_context,'runtime_hardware',None) or {})
         self.state=WorkbenchState(copy.deepcopy(startup_context.project) if startup_context else new_project(last_model(self.settings)))
         self.service=ModelService();self.pool=QThreadPool(self);self.pool.setMaxThreadCount(1);self.render_pool=QThreadPool(self);self.render_pool.setMaxThreadCount(1)
-        self.task=None;self.task_kind=None;self.render_task=None;self.render_pending=False;self.render_generation=0;self.shutdown_task=None;self.shutdown_complete=False;self.shutdown_ready=False;self.actions_to_lock=[]
+        self.task=None;self.task_kind=None;self.render_task=None;self.render_generation=0;self.shutdown_task=None;self.shutdown_complete=False;self.shutdown_ready=False;self.actions_to_lock=[]
         self.auto_prepare=auto_prepare;self.preparation=PreparationQueue();self.preparing_id=None;self.restoring_project=False
-        self.display_reference=None;self.reference_transition_pending=False
+        self.display_reference=None;self.reference_transition_pending=False;self.transition_detail=None
         self.storage_pool=QThreadPool(self);self.storage_pool.setMaxThreadCount(1);self.autosave_task=None
         from .project_save_queue import ProjectSaveQueue
         self.project_saves=ProjectSaveQueue()
@@ -83,7 +83,7 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
         self.smoother.activity.connect(self.background_activity.smoothing_changed)
         self.view.point.connect(self.add_point);self.view.box.connect(self.add_box);self.view.selected.connect(self.select_label)
         self.view.selection.connect(self.select_items)
-        self.render_timer=QTimer(self);self.render_timer.setSingleShot(True);self.render_timer.setInterval(150);self.render_timer.timeout.connect(self.request_render);self.view.viewportChanged.connect(self.render_timer.start)
+        self.render_timer=QTimer(self);self.render_timer.setSingleShot(True);self.render_timer.setInterval(0);self.render_timer.timeout.connect(self.request_render);self.view.viewportChanged.connect(self.render_timer.start)
         self.view.viewportChanged.connect(self.raster_renderer.viewport_changed)
         self.autosave_timer=QTimer(self);self.autosave_timer.setInterval(15000);self.autosave_timer.timeout.connect(self.autosave);self.autosave_timer.start()
         self.autosave_debounce=QTimer(self);self.autosave_debounce.setSingleShot(True);self.autosave_debounce.setInterval(400)
@@ -112,13 +112,13 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
     def dragEnterEvent(self,event):
         from .image_list import IMPORT_SUFFIXES
         from .operation_state import can_start_operation
-        if can_start_operation(self) and self.reshape_session is None and any(u.isLocalFile() and Path(u.toLocalFile()).suffix.lower() in IMPORT_SUFFIXES for u in event.mimeData().urls()):event.acceptProposedAction()
+        if can_start_operation(self) and any(u.isLocalFile() and Path(u.toLocalFile()).suffix.lower() in IMPORT_SUFFIXES for u in event.mimeData().urls()):event.acceptProposedAction()
 
     def dropEvent(self,event):
         from .image_list import IMPORT_SUFFIXES
         from .operation_state import can_start_operation
         files=[u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile() and Path(u.toLocalFile()).suffix.lower() in IMPORT_SUFFIXES]
-        if files and can_start_operation(self) and self.reshape_session is None:self.import_paths(files);event.acceptProposedAction()
+        if files and can_start_operation(self):self.import_paths(files);event.acceptProposedAction()
 
     def closeEvent(self,event):
         self.close_application(event)

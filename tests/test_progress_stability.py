@@ -61,7 +61,10 @@ def test_cached_preparation_batch_does_not_enable_buttons_between_images(workben
     monkeypatch.setattr(w,'ensure_model_resources',lambda:True)
     w.service.preprocess=lambda image,config,bounds,task:dict(count=9,hits=9,checkpoint=config['checkpoint'],device='cpu',execution='native')
     changes=[];resets=[];saves=[]
-    monkeypatch.setattr(w,'autosave',lambda:saves.append(True))
+    def track_save():
+        # The real autosave consumes any pending debounce before scheduling.
+        w.autosave_debounce.stop();saves.append(True)
+    monkeypatch.setattr(w,'autosave',track_save)
     class EnabledSpy(QObject):
         def eventFilter(self,obj,event):
             if obj is w.import_button and event.type()==QEvent.Type.EnabledChange:changes.append(obj.isEnabled())

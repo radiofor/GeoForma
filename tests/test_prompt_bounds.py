@@ -43,14 +43,14 @@ def test_new_box_replaces_old_box_filters_points_and_undo_restores(workbench):
     w.clear_box();w.add_point(110,110,1);assert len(w.draft['points'])==2
 
 
-def test_pending_draft_and_saved_label_stay_inside_fractional_box(workbench):
+def test_box_constrains_pending_generation_but_not_confirmed_geometry(workbench):
     w,app=workbench;w.draft={'geometry':mapping(box(0,0,100,100)),'pending':False}
     bounds=[10.25,20.75,80.5,90.5];w.add_box(bounds)
     assert shape(w.draft['geometry']).equals(box(*bounds)) and w.draft['pending']
-    # Save-time defense also handles an older or external result outside the box.
+    # Once a result exists, historical prompts no longer alter its geometry.
     w.draft['geometry']=mapping(box(0,0,100,100));w.draft['pending']=False;w.confirm()
-    saved=w.project['labels'][0];assert shape(saved['geometry']).equals(box(*bounds))
-    w.undo_label();assert not w.project['labels'];w.redo_label();assert shape(w.project['labels'][0]['geometry']).equals(box(*bounds))
+    saved=w.project['labels'][0];assert shape(saved['geometry']).equals(box(0,0,100,100))
+    w.undo_label();assert not w.project['labels'];w.redo_label();assert shape(w.project['labels'][0]['geometry']).equals(box(0,0,100,100))
 
 
 @pytest.mark.parametrize('preview',[False,True])

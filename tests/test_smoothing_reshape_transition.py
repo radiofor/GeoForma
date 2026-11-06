@@ -1,7 +1,6 @@
 """Reshape transitions never expose raw geometry while smoothing is enabled."""
 import threading,time
 
-import pytest
 from PySide6.QtTest import QTest
 from shapely.geometry import MultiPolygon,box,mapping,shape
 
@@ -16,32 +15,28 @@ def wait_until(app,predicate):
 
 
 def delay_smoothing(monkeypatch):
-    from geoforma.controllers import smoothing
+    from geoforma import smoothing
     original=smoothing.smooth_batch;started=threading.Event();release=threading.Event()
-    def delayed(labels,value,image,task,cache=None):
+    def delayed(labels,value,image,task,cache=None,cache_epoch=None):
         started.set()
         while not release.wait(.005):task.check()
-        return original(labels,value,image,task,cache)
+        return original(labels,value,image,task,cache,cache_epoch)
     monkeypatch.setattr(smoothing,'smooth_batch',delayed)
     return started,release
 
 
-@pytest.mark.parametrize('target',['saved','draft'])
-def test_reshape_keeps_previous_smooth_outline_until_new_result(workbench,monkeypatch,target):
+def test_reshape_keeps_previous_smooth_outline_until_new_result(workbench,monkeypatch):
     w,app,_=workbench
-    if target=='draft':
-        w.project['labels']=[];w.selected_id=None;w.selected_ids.clear()
-        w.draft={'geometry':mapping(box(20,20,30,30)),'points':[],'pending':False}
     w.smooth_enabled.setChecked(True);w.refresh_labels();settled(w,app)
-    key='target' if target=='saved' else '__draft';item=w.view.overlay_records[key];previous=item.geometry_value
-    source=w.project['labels'][0]['geometry'] if target=='saved' else w.draft['geometry']
+    key='target';item=w.view.overlay_records[key];previous=item.geometry_value
+    source=w.project['labels'][0]['geometry']
     assert not shape(previous).equals(shape(source))
     started,release=delay_smoothing(monkeypatch)
     try:
         w.begin_reshape(auto=True)
         for x,y in OUT:w.add_reshape_point(x,y)
         w.finish_reshape();wait_until(app,lambda:w.task is None)
-        current=w.project['labels'][0]['geometry'] if target=='saved' else w.draft['geometry']
+        current=w.project['labels'][0]['geometry']
         assert not shape(current).equals(shape(source))
         assert w.view.overlay_records[key] is item and item.geometry_value is previous
         wait_until(app,started.is_set)
@@ -96,21 +91,6 @@ def test_undo_during_smoothing_keeps_the_display_smooth(workbench,monkeypatch):
     assert not shape(item.geometry_value).equals(shape(w.project['labels'][0]['geometry']))
 
 
-def test_confirming_reshaped_draft_keeps_smooth_outline_until_ready(workbench,monkeypatch):
-    w,app,_=workbench;w.project['labels']=[];w.selected_id=None;w.selected_ids.clear()
-    w.draft={'geometry':mapping(box(20,20,30,30)),'points':[],'pending':False}
-    w.smooth_enabled.setChecked(True);w.refresh_labels();settled(w,app)
-    previous=w.view.overlay_records['__draft'].geometry_value;started,release=delay_smoothing(monkeypatch)
-    try:
-        w.begin_reshape(auto=True)
-        for x,y in OUT:w.add_reshape_point(x,y)
-        w.finish_reshape();wait_until(app,lambda:w.task is None);wait_until(app,started.is_set)
-        w.confirm();assert not w.draft and len(w.project['labels'])==1
-        item=w.view.overlay_records[w.project['labels'][0]['id']]
-        assert item.geometry_value is previous
-    finally:
-        release.set();settled(w,app)
-    assert not shape(item.geometry_value).equals(shape(w.project['labels'][0]['geometry']))
 
 
 def test_large_label_index_rebuild_keeps_smooth_outline(workbench,monkeypatch):

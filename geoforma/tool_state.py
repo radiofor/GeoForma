@@ -4,6 +4,26 @@ TOOLS=frozenset(('positive','negative','box','select_points','select','pan','res
 PROMPT_TOOLS=frozenset(('positive','negative','box','select_points'))
 
 
+def has_unsaved_annotation(draft):
+    """A draft or in-progress annotation must be resolved before reshaping."""
+    return any(draft.get(key) for key in ('geometry','base_id','points','box','manual_vertices','reshape_batch','pending'))
+
+
+def has_reshape_target(window):
+    """A saved label and no unfinished annotation are required for reshape."""
+    return bool(window.image and window.current_labels() and not has_unsaved_annotation(window.draft))
+
+
+def reshape_presentation_pending(window):
+    """Do not edit an outline retained from an older geometry or option."""
+    if getattr(window,'_reshape_smoothing_hold',None):return True
+    context=window.annotation_context()
+    return bool(getattr(window,'_presentation_failed_context',None)==context or
+                (getattr(window,'_presentation_transition_pending',False)
+                 and not getattr(window,'_presentation_ready',True)
+                 and getattr(window,'_presentation_transition_context',None)==context))
+
+
 def compatible_tool(tool,mode):
     return isinstance(tool,str) and tool in TOOLS and mode=='individual'
 
@@ -27,9 +47,10 @@ def available_tools(window):
         **dict.fromkeys(('positive','negative','box','select_points'),prompt),
         'select':can_browse(window),
         'pan':True,
-        'draw_polygon':bool(image and not busy and window.raw_view_action.isChecked() and window.reshape_session is None),
-        'reshape':bool(image and not busy and window.raw_view_action.isChecked()
-                       and not window.draft.get('pending')),
+        'draw_polygon':bool(image and not busy and window.raw_view_action.isChecked()
+                            and (not has_unsaved_annotation(window.draft) or bool(window.draft.get('manual_vertices')))),
+        'reshape':bool(not busy and window.raw_view_action.isChecked() and has_reshape_target(window)
+                       and not reshape_presentation_pending(window)),
     }
     if window.draft.get('manual_vertices'):
         for tool in tools:

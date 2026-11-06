@@ -4,24 +4,13 @@ import os
 from pathlib import Path
 import numpy as np
 import torch
-from rasterio.features import shapes, rasterize
+from rasterio.features import rasterize
 from rasterio.transform import Affine
-from shapely.geometry import shape, mapping, box as geometry_box
-from shapely.ops import unary_union
+from .pixel_geometry import mask_geometry
 
 from .domain import digest
 from .prompt_bounds import bounded_points,bounded_mask,clip_geometry
 from .single_polygon import single_mask,preview_bitmap
-
-
-def mask_geometry(mask, window, image):
-    transform=Affine.translation(window[0],window[1])
-    geometries=[shape(g) for g,_ in shapes(mask.astype(np.uint8),mask=mask,transform=transform)]
-    if not geometries:return None
-    g=unary_union(geometries).intersection(geometry_box(0,0,image['width'],image['height']))
-    if g.is_empty:return None
-    if not g.is_valid:raise ValueError('掩膜轮廓无效，未执行静默平滑或修复。')
-    return mapping(g)
 
 
 def atomic_torch(payload,path):

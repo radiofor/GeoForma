@@ -47,32 +47,46 @@ def test_large_batch_keeps_cached_hits_even_if_misses_precede_them(monkeypatch):
     smoothing.smooth_batch(labels,1,cache=cache);assert len(calls)==5
 
 
-def test_project_save_reuses_cached_geometry_without_changing_file_semantics(tmp_path,raster_image,monkeypatch):
+def test_project_save_never_computes_or_persists_smoothed_geometry(tmp_path,raster_image,monkeypatch):
     import copy,json
+    import pytest
     from geoforma.domain import new_project
     from geoforma.storage import project_snapshot,save_project,load_project
     image=raster_image;labels=[dict(record('a',box(20,20,30,30)),image_id=image['id'],class_id=1)]
     project=new_project();project['images']=[image];project['labels']=labels
-    snapshot=project_snapshot(project);before=copy.deepcopy(snapshot);cache=SmoothingGeometryCache()
-    smoothing.smooth_batch(labels,1,image,cache=cache)
-    calls=[];original=smoothing._smooth_shape
-    def counted(*args):calls.append(1);return original(*args)
-    monkeypatch.setattr(smoothing,'_smooth_shape',counted)
-    cached_path=tmp_path/'cached.gfm';save_project(snapshot,cached_path,smoothing_cache=cache,cache_epoch=cache.snapshot())
-    assert not calls and snapshot==before
-    fresh_path=tmp_path/'fresh.gfm';save_project(snapshot,fresh_path)
-    assert len(calls)==1
-    cached=json.loads(cached_path.read_text(encoding='utf-8'))['labels'][0]
-    fresh=json.loads(fresh_path.read_text(encoding='utf-8'))['labels'][0]
-    assert shape(cached['geometry']).equals(shape(fresh['geometry']))
-    assert cached['source_geometry']==fresh['source_geometry'] and shape(load_project(cached_path)['labels'][0]['geometry']).equals(shape(labels[0]['geometry']))
+    snapshot=project_snapshot(project);before=copy.deepcopy(snapshot)
+    monkeypatch.setattr(smoothing,'_smooth_shape',lambda *args:pytest.fail('项目保存不应计算平滑'))
+    path=tmp_path/'project.gfm';save_project(snapshot,path)
+    saved=json.loads(path.read_text(encoding='utf-8'))['labels'][0]
+    assert snapshot==before and shape(saved['geometry']).equals(shape(labels[0]['geometry']))
+    assert 'source_geometry' not in saved and 'smoothing_applied' not in saved
+    assert shape(load_project(path)['labels'][0]['geometry']).equals(shape(labels[0]['geometry']))
 
 
-def test_stale_save_epoch_does_not_repopulate_geometry_cache(tmp_path,raster_image):
+def test_legacy_geometry_is_rejected_without_overwriting_current_geometry(tmp_path,raster_image):
+    import json,pytest
+    from geoforma.domain import new_project
+    from geoforma.storage import save_project,load_project
+    raw=mapping(box(20,20,30,30))
+    project=new_project();project['images']=[raster_image]
+    project['labels']=[dict(record('a',box(21,21,29,29)),image_id=raster_image['id'],class_id=1,
+                            source_geometry=raw,smoothing_applied=1)]
+    path=tmp_path/'existing.gfm';path.write_text(json.dumps(project),encoding='utf-8')
+    before=path.read_bytes()
+    with pytest.raises(ValueError,match='旧轮廓字段'):load_project(path)
+    with pytest.raises(ValueError,match='旧轮廓字段'):save_project(project,path)
+    assert path.read_bytes()==before
+
+
+def test_saving_rejects_legacy_geometry_in_undo_history(tmp_path,raster_image):
+    import copy,pytest
     from geoforma.domain import new_project
     from geoforma.storage import save_project
     project=new_project();project['images']=[raster_image]
-    project['labels']=[dict(record('a',box(20,20,30,30)),image_id=raster_image['id'],class_id=1)]
-    cache=SmoothingGeometryCache();old_epoch=cache.snapshot();cache.clear()
-    save_project(project,tmp_path/'old.gfm',smoothing_cache=cache,cache_epoch=old_epoch)
-    assert not cache.entries and cache.bytes==0
+    label=dict(record('a',box(20,20,30,30)),image_id=raster_image['id'],class_id=1)
+    project['labels']=[label]
+    previous=dict(copy.deepcopy(label),raw_geometry=copy.deepcopy(label['geometry']))
+    project['history']={'schema':1,'labels':{'individual':{'undo':[[('a',previous,0)]],'redo':[]}}}
+    path=tmp_path/'existing.gfm';path.write_bytes(b'existing')
+    with pytest.raises(ValueError,match='旧轮廓字段'):save_project(project,path)
+    assert path.read_bytes()==b'existing'

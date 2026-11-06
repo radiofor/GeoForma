@@ -37,20 +37,20 @@ def test_cache_switch_preserves_original_and_reuses_when_switched_back(tmp_path,
     assert original_file.read_bytes()==b'ready'
 
 
-def test_recovery_can_find_legacy_data_after_location_change(tmp_path):
+def test_recovery_uses_recorded_location_without_guessing(tmp_path):
     from geoforma.recovery import recovery_target
     class Settings:
         def value(self,*args):return ''
     legacy=tmp_path/'legacy';selected=tmp_path/'selected'
     (legacy/'recovery').mkdir(parents=True)
     path=legacy/'recovery'/'untitled.gfm';path.write_text('{"images":[{}]}')
-    assert recovery_target(Settings(),selected,legacy)==path
+    assert recovery_target(Settings(),selected,legacy) is None
     newer=selected/'recovery'/'untitled.gfm';newer.parent.mkdir(parents=True);newer.write_text('{"images":[{}]}')
     import os
     os.utime(path,ns=(100,100));os.utime(newer,ns=(200,200))
     class RememberOld:
         def value(self,key,default=''):return str(path) if key=='recovery/last_work' else ''
-    assert recovery_target(RememberOld(),selected,legacy)==newer
+    assert recovery_target(RememberOld(),selected,legacy)==path
 
 
 def test_error_log_is_bounded_and_preserves_unrelated_files(tmp_path):

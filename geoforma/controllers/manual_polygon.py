@@ -1,13 +1,16 @@
 """Draw a polygon directly in image pixel coordinates, without model inference."""
 import copy
+import math
 from datetime import datetime
 from shapely.geometry import Polygon,mapping
 
 
 class ManualPolygonWorkflow:
     def add_manual_vertex(self,x,y):
-        if not self.image or self.foreground_task_active() or not self.raw_view_action.isChecked():return
-        if self.draft and 'manual_vertices' not in self.draft:
+        from ..operation_state import interaction_locked
+        if interaction_locked(self) or not self.image or self.foreground_task_active() or self.reshape_session is not None or not self.raw_view_action.isChecked():return
+        from ..tool_state import has_unsaved_annotation
+        if has_unsaved_annotation(self.draft) and not self.draft.get('manual_vertices'):
             self.statusBar().showMessage('请先保存或取消当前标签，再绘制新多边形。',4000);return
         points=self.draft.get('manual_vertices',[])
         if len(points)>=8192:
@@ -39,10 +42,41 @@ class ManualPolygonWorkflow:
         polygon=Polygon(points)
         if polygon.is_empty or not polygon.is_valid or polygon.area<=0:
             self.statusBar().showMessage('多边形无效，请撤回顶点并避免边界交叉。',5000);return
-        vertices=copy.deepcopy(points)
-        self.draft={'geometry':mapping(polygon),'points':[],'box':None,'pending':False,
+        from ..pixel_geometry import pixel_contour
+        image={key:self.image[key] for key in ('width','height')};source=mapping(polygon)
+        single=self.single_polygon.isChecked();context=self.annotation_context();vertices=copy.deepcopy(points);draft=self.draft
+        def current():
+            return (self.draft is draft and self.annotation_context()==context and self.draft.get('manual_vertices')==vertices
+                    and self.single_polygon.isChecked()==single and self.image is not None
+                    and all(self.image[key]==image[key] for key in image))
+        def convert(task=None):
+            geometry=pixel_contour(source,image,task)
+            if single:
+                from ..single_polygon import select_polygon
+                geometry=select_polygon(geometry)
+            return geometry
+        def publish(geometry):
+            if not current():return
+            self.commit_manual_polygon(geometry)
+        x0,y0,x1,y1=polygon.bounds
+        area=max(0,min(image['width'],math.ceil(x1))-max(0,math.floor(x0)))*max(0,min(image['height'],math.ceil(y1))-max(0,math.floor(y0)))
+        if area>65536:
+            def work(task):
+                try:return convert(task),None
+                except ValueError as error:return None,str(error)
+            def done(result):
+                geometry,error=result
+                if not current():return
+                if error:self.task_outcome='failed';self.statusBar().showMessage(error,5000)
+                else:publish(geometry)
+            self.run('生成多边形',work,done,kind='manual_polygon',deferred_valid=current);return
+        try:publish(convert())
+        except ValueError as error:self.statusBar().showMessage(str(error),5000)
+
+    def commit_manual_polygon(self,geometry):
+        self.draft={'geometry':geometry,'points':[],'box':None,'pending':False,
                     'editing_state':'manual','source':'manual_draw',
-                    'manual_edits':[{'tool':'draw_polygon','vertices':vertices,'at':datetime.now().isoformat()}]}
+                    'manual_edits':[{'tool':'draw_polygon','at':datetime.now().isoformat()}]}
         self.prompt_undo=[{'_draft':{}}];self.prompt_redo=[];self.view.clear_reshape()
         self.update_draft_info();self.refresh_labels();self.update_controls();self.mark_dirty()
         self.statusBar().showMessage('多边形已绘制，可选择类别并保存标签。',4000)
