@@ -22,7 +22,9 @@ class DisplayWorkflow:
         updates=viewport.updatesEnabled()
         if transitioning and updates:viewport.setUpdatesEnabled(False)
         try:
-            self.view.show_raster(*value,window,overview)
+            from ..rendering.raster_queue import reference_source
+            source=reference_source(self.display_reference)
+            self.view.show_raster(*value,window,overview,source)
             if switching:
                 self.reference_transition_pending=False;self.visible_reference=self.display_reference
                 self.transition_detail=(self.render_generation,self.raster_renderer.revision)

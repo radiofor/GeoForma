@@ -16,7 +16,10 @@ class LabelIndex:
         tree=STRtree(shapes);self.confirmed=[];self._geometries=[];unchanged_index=True
         for index,(label,geometry) in enumerate(zip(saved,shapes)):
             if task:task.check()
-            covers=[shapes[int(j)] for j in tree.query(geometry,predicate='intersects') if int(j)>index]
+            # Shared edges and corners do not remove any area. Avoid building
+            # unions and differences for dense grids of touching labels.
+            covers=[shapes[int(j)] for j in tree.query(geometry,predicate='intersects')
+                    if int(j)>index and geometry.relate_pattern(shapes[int(j)],'T********')]
             clipped=geometry.difference(unary_union(covers)) if covers else geometry
             if not clipped.is_empty:
                 unchanged=not covers or clipped.equals(geometry)
@@ -38,7 +41,8 @@ class LabelIndex:
         saved=self.confirmed
         if geometry:
             active=shape(geometry)
-            affected={int(i) for i in self._tree.query(active,predicate='intersects')}
+            affected={int(i) for i in self._tree.query(active,predicate='intersects')
+                      if self._geometries[int(i)].relate_pattern(active,'T********')}
             saved=[]
             for index,label in enumerate(self.confirmed):
                 if label['id']==base:continue

@@ -88,9 +88,10 @@ class SamBackend:
         if rgb is None:
             from .raster import read_rgb
             rgb,_=read_rgb(image,window)
-        from .feature_cache import feature_path
+        from .feature_cache import feature_path,check_rewrite_space
         from .resource_location import require_resource_dir
-        key=self.key(image,window);path=feature_path(require_resource_dir(),key)
+        root=require_resource_dir();key=self.key(image,window);path=feature_path(root,key)
+        check_rewrite_space(root,path,self.cache_bytes)
         with torch.inference_mode():
             self.predictor.set_image(rgb)
             atomic_torch({'key':key,'metadata':self.descriptor(image,window),'source_path':image['path'],

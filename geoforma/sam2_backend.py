@@ -77,14 +77,15 @@ class Sam2Backend(SamBackend):
         if rgb is None:
             from .raster import read_rgb
             rgb,_=read_rgb(image,window)
-        from .feature_cache import feature_path
-        key=self.key(image,window)
+        from .feature_cache import feature_path,check_rewrite_space
+        root=require_resource_dir();key=self.key(image,window);path=feature_path(root,key)
+        check_rewrite_space(root,path,self.cache_bytes)
         with torch.inference_mode():
             p=self.predictor;p.set_image(rgb)
             features={'image_embed':p._features['image_embed'].cpu(),
                       'high_res_feats':[t.cpu() for t in p._features['high_res_feats']]}
             atomic_torch({'key':key,'metadata':self.descriptor(image,window),'source_path':image['path'],
                           'source_crs':image.get('assigned_crs') or image['crs'],'features':features,
-                          'orig_hw':[list(v) for v in p._orig_hw]},feature_path(require_resource_dir(),key))
+                          'orig_hw':[list(v) for v in p._orig_hw]},path)
         self.cache_key=key;return False
 

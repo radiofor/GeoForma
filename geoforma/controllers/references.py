@@ -81,6 +81,13 @@ class ReferenceWorkflow:
     def replace_references(self,records,replacement=None):
         old=self.display_reference;visible=getattr(self,'visible_reference',None)
         before=display_descriptor(self.image,old) if self.image else None
+        previous=self.project.get('references',[])
+        from ..rendering.raster_queue import reference_source
+        retained={reference_source(ref) for ref in records}
+        removed={source for ref in previous if (source:=reference_source(ref)) is not None and source not in retained}
+        if removed:
+            self.raster_renderer.evict_references(removed)
+            self.view.layers.pixmap_cache.evict_references(removed)
         self.project['references']=records;choices=self.current_references()
         def resolve(record):
             if record is None:return None

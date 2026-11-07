@@ -71,8 +71,9 @@ class Sam3Backend(Sam2Backend):
             from .raster import read_rgb
             rgb,_=read_rgb(image,window)
         from PIL import Image
-        from .feature_cache import feature_path
-        key=self.key(image,window)
+        from .feature_cache import feature_path,check_rewrite_space
+        root=require_resource_dir();key=self.key(image,window);path=feature_path(root,key)
+        check_rewrite_space(root,path,self.cache_bytes)
         with torch.inference_mode(),torch.autocast(self.config['device'],dtype=torch.bfloat16):
             # PIL preserves H/W correctly; official processor treats arrays as CHW.
             state=self.processor.set_image(Image.fromarray(rgb))
@@ -86,7 +87,7 @@ class Sam3Backend(Sam2Backend):
             atomic_torch({'key':key,'metadata':self.descriptor(image,window),'source_path':image['path'],
                           'source_crs':image.get('assigned_crs') or image.get('crs',''),
                           'features':{'image_embed':features[-1].float().cpu(),'high_res_feats':[f.float().cpu() for f in features[:-1]]},
-                          'orig_hw':[list(p._orig_hw[0])]},feature_path(require_resource_dir(),key))
+                          'orig_hw':[list(p._orig_hw[0])]},path)
         self.cache_key=key;return False
 
     def predict(self,*args,**kwargs):

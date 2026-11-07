@@ -4,6 +4,32 @@ import sys
 import pytest
 
 
+def test_resource_marker_check_is_bounded_and_rejects_extra_data(tmp_path,monkeypatch):
+    from pathlib import Path
+    from geoforma.resource_location import MARKER_CONTENT,valid_resource_marker
+    marker=tmp_path/'.geoforma-resources';marker.write_bytes(MARKER_CONTENT.encode()+b'x'*10000)
+    original=Path.open;reads=[]
+    class Tracked:
+        def __init__(self,stream):self.stream=stream
+        def __enter__(self):self.stream.__enter__();return self
+        def __exit__(self,*args):return self.stream.__exit__(*args)
+        def read(self,size=-1):reads.append(size);return self.stream.read(size)
+    def open_tracked(path,*args,**kwargs):
+        stream=original(path,*args,**kwargs)
+        return Tracked(stream) if path==marker else stream
+    monkeypatch.setattr(Path,'open',open_tracked)
+    assert not valid_resource_marker(marker)
+    assert reads==[len(MARKER_CONTENT.encode())+2]
+
+
+@pytest.mark.parametrize('newline',[b'\n',b'\r\n',b'\r'])
+def test_resource_marker_accepts_original_text_newlines(tmp_path,newline):
+    from geoforma.resource_location import MARKER_CONTENT,valid_resource_marker
+    marker=tmp_path/'.geoforma-resources'
+    marker.write_bytes(MARKER_CONTENT.rstrip('\n').encode()+newline)
+    assert valid_resource_marker(marker)
+
+
 def test_new_default_uses_resources_folder_but_existing_cache_stays_in_place(tmp_path,monkeypatch):
     from geoforma.resource_location import current_resource_dir,require_resource_dir
     monkeypatch.delenv('GEOFORMA_DATA_DIR',raising=False)

@@ -17,6 +17,13 @@ def feature_path(root,key):
     return path
 
 
+def check_rewrite_space(root,path,expected_bytes):
+    """Reserve space when an existing archive proved unusable at restore time."""
+    if path.exists():
+        from .workflow import check_cache_space
+        check_cache_space(root,1,expected_bytes)
+
+
 def load_features(path,expected_bytes):
     path=Path(path);limit=expected_bytes*2+8*1024**2
     try:

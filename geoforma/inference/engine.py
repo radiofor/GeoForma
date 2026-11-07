@@ -56,16 +56,23 @@ class ModelEngine:
         from ..resource_location import require_resource_dir
         root=require_resource_dir();folder=feature_directory(root)
         # Preflight only uncached features; do not reject a completed cache on a full disk.
+        existing=None
         if count>4096:
-            existing=0
-            for path in folder.glob('*.pt'):
-                existing+=1
-                if existing%1000==0:task.check()
-            check_cache_space(root,max(0,count-existing),getattr(self.backend,'cache_bytes',4*1024*1024))
+            import os
+            existing=set()
+            try:
+                with os.scandir(folder) as entries:
+                    for index,entry in enumerate(entries):
+                        if index%1000==0:task.check()
+                        if entry.name.endswith('.pt') and entry.is_file(follow_symlinks=False):existing.add(entry.name)
+            except FileNotFoundError:pass
+            check_cache_space(root,max(0,count-len(existing)),getattr(self.backend,'cache_bytes',4*1024*1024))
         missing=0
         for index,window in enumerate(tiles(bounds,image['width'],image['height'])):
             if index%64==0:task.check();task.signals.progress.emit(index,count,'检查完整影像缓存')
-            if not (folder/(self.backend.key(image,window)+'.pt')).exists():missing+=1
+            name=self.backend.key(image,window)+'.pt'
+            cached=name in existing if existing is not None else (folder/name).exists()
+            if not cached:missing+=1
         check_cache_space(root,missing,getattr(self.backend,'cache_bytes',4*1024*1024))
         hits=0;processed=0
         windows=tiles(bounds,image['width'],image['height'])

@@ -50,6 +50,39 @@ def test_disk_budget_blocks_huge_image_before_encoding_but_allows_cache_hits(tmp
     assert check_cache_space(tmp_path,0)==0
 
 
+def test_cached_work_needs_no_disk_space_even_below_reserve(tmp_path,monkeypatch):
+    import geoforma.workflow as workflow
+    monkeypatch.setattr(workflow.shutil,'disk_usage',lambda p:SimpleNamespace(free=10))
+    assert check_cache_space(tmp_path,0)==0
+    with pytest.raises(RuntimeError,match='缓存空间不足'):check_cache_space(tmp_path,1)
+
+
+def test_unusable_existing_feature_checks_space_before_replacement(tmp_path,monkeypatch):
+    import geoforma.workflow as workflow
+    from geoforma.feature_cache import check_rewrite_space
+    path=tmp_path/'bad.pt';calls=[]
+    monkeypatch.setattr(workflow,'check_cache_space',lambda root,count,size:calls.append((root,count,size)))
+    check_rewrite_space(tmp_path,path,123);assert not calls
+    path.write_bytes(b'invalid')
+    check_rewrite_space(tmp_path,path,123);assert calls==[(tmp_path,1,123)]
+
+
+def test_large_preflight_reuses_single_directory_scan(tmp_path,monkeypatch):
+    import geoforma.workflow as workflow
+    import geoforma.inference.engine as module
+    monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path))
+    folder=tmp_path/'cache'/'features';folder.mkdir(parents=True)
+    (folder/(f'{0:064x}'+'.pt')).write_bytes(b'cached')
+    monkeypatch.setattr(workflow,'tile_count',lambda im:4097)
+    monkeypatch.setattr(module,'tiles',lambda *args:((i,0,1,1) for i in range(4097)))
+    budgets=[];monkeypatch.setattr(workflow,'check_cache_space',lambda root,count,size:budgets.append(count))
+    backend=SimpleNamespace(config={'device':'cpu'},key=lambda im,w:f'{w[0]:064x}',encode=lambda *a:False)
+    engine=ModelEngine();engine.backend=backend;engine.prepare_backend=lambda *a:None
+    task=SimpleNamespace(check=lambda:None,signals=SimpleNamespace(progress=SimpleNamespace(emit=lambda *a:None)))
+    engine.preprocess(image(),{'checkpoint':'test'},None,task)
+    assert budgets==[4096,4096]
+
+
 def test_choice_prefers_explicit_prompts_then_model_score():
     from geoforma.workflow import best_choice,prompt_misses
     from shapely.geometry import box,mapping

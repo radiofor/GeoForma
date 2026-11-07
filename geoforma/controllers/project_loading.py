@@ -202,7 +202,8 @@ class ProjectLoadingWorkflow:
                 elif self.image:
                     self.view.loading.setText(ui_text('project.display_bands'));self.view.loading.adjustSize()
                 if loaded.smoothing:
-                    sources,value=loaded.smoothing;self.smoother.prime(self.smoothing_key(sources),sources,value)
+                    from ..smoothing import settings
+                    sources,value=loaded.smoothing;self.smoother.prime(self.smoothing_key(sources),sources,value,retain=settings(self.project,self.annotation_mode())['enabled'],context=self.annotation_context())
                 self.refresh_labels();self.update_draft_info();self.update_controls()
                 tool=state.get('tool',self.tool_modes.get(self.annotation_mode()))
                 self.restore_tool(tool)

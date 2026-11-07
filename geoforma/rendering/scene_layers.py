@@ -97,13 +97,13 @@ class SceneLayers:
     def viewport(self):return self.view.viewport()
     def transform(self):return self.view.transform()
 
-    def show_raster(self,array,valid,window,overview=False):
+    def show_raster(self,array,valid,window,overview=False,source=None):
         import numpy as np
-        h,w=array.shape[:2];pixmap=self.pixmap_cache.get(array,valid)
+        h,w=array.shape[:2];pixmap=self.pixmap_cache.get(array,valid,source)
         if pixmap is None:
             rgba=np.dstack([array,valid.astype(np.uint8)*255])
             image=QImage(rgba.data,w,h,rgba.strides[0],QImage.Format.Format_RGBA8888).copy()
-            pixmap=QPixmap.fromImage(image);self.pixmap_cache.put(array,valid,pixmap)
+            pixmap=QPixmap.fromImage(image);self.pixmap_cache.put(array,valid,pixmap,source)
         current=self.base_item if overview else self.detail_item
         if current:current.setPixmap(pixmap);item=current
         elif overview:

@@ -85,8 +85,8 @@ class ImageView(ViewNavigation,QGraphicsView):
         if self.raster_rect.isEmpty():self.resetTransform()
 
 
-    def show_raster(self, array, valid, window, overview=False):
-        result=self.layers.show_raster(array,valid,window,overview);self.loading.hide();return result
+    def show_raster(self, array, valid, window, overview=False, source=None):
+        result=self.layers.show_raster(array,valid,window,overview,source);self.loading.hide();return result
 
     def show_raster_error(self):
         if self.layers.base_item is None and self.layers.detail_item is None and not self.raster_rect.isEmpty():

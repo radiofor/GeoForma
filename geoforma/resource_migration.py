@@ -4,7 +4,7 @@ from pathlib import Path
 from .atomic_io import atomic_json,atomic_target,read_json
 from .domain import data_dir
 from .project_files import RECOVERY_NAME
-from .resource_location import (CONFIG,FOLDER,MARKER,MARKER_CONTENT,current_resource_dir,
+from .resource_location import (CONFIG,FOLDER,MARKER,valid_resource_marker,current_resource_dir,
                                 default_resource_dir,prepare_resource_parent,require_resource_dir)
 
 JOURNAL='resource-migration.json'
@@ -135,7 +135,7 @@ def _validate(record,source,target):
     for path in (source,target):
         if path==root:continue
         marker=path/MARKER
-        if path.name.casefold()!=FOLDER.casefold() or marker.is_symlink() or marker.is_junction() or not marker.is_file() or marker.read_text(encoding='utf-8')!=MARKER_CONTENT:
+        if path.name.casefold()!=FOLDER.casefold() or not valid_resource_marker(marker):
             raise ValueError('迁移目录归属无效。')
     entries=record.get('files')
     if not isinstance(entries,list) or record.get('phase') not in ('copy','committed'):raise ValueError('迁移记录无效。')

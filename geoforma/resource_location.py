@@ -10,6 +10,15 @@ MARKER='.geoforma-resources'
 MARKER_CONTENT='GeoForma resource directory v1\n'
 
 
+def valid_resource_marker(marker):
+    """Check the fixed marker without reading an arbitrarily large file."""
+    marker=Path(marker)
+    if marker.is_symlink() or marker.is_junction() or not marker.is_file():return False
+    expected=MARKER_CONTENT.encode('utf-8')
+    with marker.open('rb') as stream:data=stream.read(len(expected)+2)
+    return data.replace(b'\r\n',b'\n').replace(b'\r',b'\n')==expected
+
+
 def default_resource_dir(root):
     """Keep established user resources; new profiles get a separate folder."""
     root=Path(root)
@@ -54,7 +63,7 @@ def require_resource_dir(default=None):
             if any(path.iterdir()):raise ValueError('默认资源目录已有其他文件，请选择其他目录。')
             with marker.open('x',encoding='utf-8',newline='\n') as stream:stream.write(MARKER_CONTENT)
     marker=path/MARKER
-    if path.is_symlink() or path.is_junction() or marker.is_symlink() or marker.is_junction() or not marker.is_file() or marker.read_text(encoding='utf-8')!=MARKER_CONTENT:
+    if path.is_symlink() or path.is_junction() or not valid_resource_marker(marker):
         raise ValueError('资源目录不可访问或归属标记无效，请检查所选磁盘。')
     guard_resource(path)
     return path
@@ -70,7 +79,7 @@ def prepare_resource_parent(parent):
     marker=path/MARKER
     if marker.is_symlink() or marker.is_junction():raise ValueError('资源目录标记不能是链接。')
     if marker.is_file():
-        if marker.read_text(encoding='utf-8')!=MARKER_CONTENT:raise ValueError('资源目录归属标记无效。')
+        if not valid_resource_marker(marker):raise ValueError('资源目录归属标记无效。')
     elif any(path.iterdir()):raise ValueError('该 GeoForma-Resources 文件夹已有其他文件，请选择其他目录。')
     else:
         with marker.open('x',encoding='utf-8',newline='\n') as stream:stream.write(MARKER_CONTENT)

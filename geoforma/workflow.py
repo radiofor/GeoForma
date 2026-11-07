@@ -37,6 +37,7 @@ def preparation_window(images,current):
     return tuple(images[index:index+2]) if index is not None else ()
 
 def check_cache_space(root,count,bytes_per_block=4*1024*1024):
+    if count==0:return 0
     root=Path(root);root.mkdir(parents=True,exist_ok=True);free=shutil.disk_usage(root).free
     reserve=max(1024**3,min(10*1024**3,free//10));required=count*(bytes_per_block+16384)
     if required>free-reserve:

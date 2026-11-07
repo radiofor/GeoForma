@@ -7,6 +7,11 @@ from ..domain import digest
 from ..tasks import Task
 
 
+def reference_source(reference):
+    if not reference or not reference.get('fingerprint'):return None
+    return (reference['fingerprint'],digest(reference.get('display_recipe')))
+
+
 def display_snapshot(image):
     # Drafts and saved annotations are not inputs to the raster reader.
     return copy.deepcopy({k:v for k,v in image.items() if k in ('id','path','width','height','fingerprint','display_recipe','transform','crs','assigned_crs','_reference')})
@@ -37,6 +42,7 @@ class RasterRenderQueue(QObject):
         super().__init__(parent);self.pool=pool;self.reader=reader;self.max_bytes=max_bytes
         self.task=None;self.active_request=None;self.pending_overview=None;self.pending_detail=None;self.cache=OrderedDict();self.cache_bytes=0
         self.generation=0;self.revision=0;self.cache_epoch=0;self.closed=False;self.displayed={};self.wanted={};self.reads=0;self.hits=0;self.discarded=0
+        self.reference_sources={}
 
     def viewport_changed(self):self.revision+=1
 
@@ -54,7 +60,7 @@ class RasterRenderQueue(QObject):
         if key in self.cache:
             setattr(self,slot,None);self._start(request);return
         active=self.active_request
-        if self.task is not None and active is not None and (active.key,active.generation,active.revision,active.overview)==(key,generation,request.revision,overview):
+        if self.task is not None and not getattr(self.task,'reference_evicted',False) and active is not None and (active.key,active.generation,active.revision,active.overview)==(key,generation,request.revision,overview):
             setattr(self,slot,None);return
         if self.task is not None:setattr(self,slot,request);return
         self._start(request)
@@ -75,16 +81,18 @@ class RasterRenderQueue(QObject):
         self.reads+=1
         task=Task(lambda t:self.reader(request.image,request.window,request.image['display_recipe'],request.size));self.task=task;self.active_request=request;self.activity.emit(task)
         epoch=self.cache_epoch
+        source=reference_source(request.image.get('_reference'))
         def result(value):
             if self.closed:return
-            if epoch!=self.cache_epoch:self.discarded+=1;return
+            if epoch!=self.cache_epoch or getattr(task,'reference_evicted',False):
+                self.discarded+=1;return
             size=sum(v.nbytes for v in value)
             if size<=self.max_bytes:
                 for array in value:array.setflags(write=False)
                 if request.key in self.cache:self.cache_bytes-=sum(v.nbytes for v in self.cache.pop(request.key))
-                self.cache[request.key]=value;self.cache_bytes+=size
+                self.cache[request.key]=value;self.reference_sources[request.key]=source;self.cache_bytes+=size
                 while self.cache_bytes>self.max_bytes:
-                    _,removed=self.cache.popitem(last=False);self.cache_bytes-=sum(v.nbytes for v in removed)
+                    key,removed=self.cache.popitem(last=False);self.reference_sources.pop(key,None);self.cache_bytes-=sum(v.nbytes for v in removed)
             self._publish(request,value)
         def finished():
             self.task=None;self.active_request=None;self.activity.emit(None)
@@ -108,7 +116,7 @@ class RasterRenderQueue(QObject):
     def reset(self,generation,clear_cache=False):
         self.generation=generation;self.viewport_changed();self.pending_overview=None;self.pending_detail=None;self.displayed.clear();self.wanted.clear()
         if clear_cache:
-            self.cache_epoch+=1;self.cache.clear();self.cache_bytes=0
+            self.cache_epoch+=1;self.cache.clear();self.reference_sources.clear();self.cache_bytes=0
 
     def prime(self,image,window,size,value):
         key=display_key(image,window,size)
@@ -116,10 +124,29 @@ class RasterRenderQueue(QObject):
         if amount>self.max_bytes:return
         for array in value:array.setflags(write=False)
         if key in self.cache:self.cache_bytes-=sum(v.nbytes for v in self.cache.pop(key))
-        self.cache[key]=value;self.cache_bytes+=amount
+        self.cache[key]=value;self.reference_sources[key]=reference_source(image.get('_reference'));self.cache_bytes+=amount
         while self.cache_bytes>self.max_bytes:
-            _,removed=self.cache.popitem(last=False);self.cache_bytes-=sum(v.nbytes for v in removed)
+            old,removed=self.cache.popitem(last=False);self.reference_sources.pop(old,None);self.cache_bytes-=sum(v.nbytes for v in removed)
+
+    def evict_references(self,sources):
+        """Discard unreferenced decoded frames and reject in-flight old reads."""
+        sources=set(sources)
+        active=self.active_request
+        if self.task is not None and active is not None and reference_source(active.image.get('_reference')) in sources:
+            self.task.reference_evicted=True
+        for slot in ('pending_overview','pending_detail'):
+            request=getattr(self,slot)
+            if request is not None and reference_source(request.image.get('_reference')) in sources:
+                setattr(self,slot,None)
+        removed=[]
+        for key,source in list(self.reference_sources.items()):
+            if source in sources:
+                self.reference_sources.pop(key,None)
+                value=self.cache.pop(key,None)
+                if value is not None:
+                    self.cache_bytes-=sum(v.nbytes for v in value);removed.append(value)
+        return removed
 
     def has_cached(self,image,window,size):return display_key(image,window,size) in self.cache
 
-    def close(self):self.closed=True;self.pending_overview=None;self.pending_detail=None;self.cache.clear();self.cache_bytes=0
+    def close(self):self.closed=True;self.pending_overview=None;self.pending_detail=None;self.cache.clear();self.reference_sources.clear();self.cache_bytes=0

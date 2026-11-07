@@ -64,17 +64,20 @@ class SmoothingWorkflow:
         return smoothing_sources(sources,self.draft,draft)
 
     def smooth_display(self,labels,draft):
+        self.smoother.set_context(self.annotation_context())
         config=settings(self.project,self.annotation_mode())
         if getattr(self,'_presentation_transition_pending',False) and getattr(self,'_presentation_transition_context',None)!=self.annotation_context():
             self._presentation_transition_pending=False
         fill=self.fill_holes.isChecked();self._presentation_ready=True
         if not (config['enabled'] or fill) or not self.image:
+            if self.image and self.smoother.pinned:self.smoother.validate_pinned(self.smoothing_sources(draft))
             self._reshape_smoothing_hold=None;self.smoother.stop();return labels,draft
         sources=self.smoothing_sources(draft)
         if not sources:
             # A previous image may still be smoothing; do not spend CPU on a
             # result that cannot be displayed in the now-empty context.
-            self._presentation_transition_pending=False;self._reshape_smoothing_hold=None;self.smoother.stop();return labels,draft
+            self._presentation_transition_pending=False;self._reshape_smoothing_hold=None;self.smoother.clear_pinned();self.smoother.stop();return labels,draft
+        if not config['enabled'] and self.smoother.pinned:self.smoother.validate_pinned(sources)
         if not config['enabled'] and fill:
             from ..hole_filling import has_holes
             if not any(has_holes(label['geometry']) for label in sources):
@@ -93,7 +96,7 @@ class SmoothingWorkflow:
                 self._reshape_smoothing_hold=hold
         image={k:self.image[k] for k in ('width','height') if k in self.image}
         from ..label_presentation import presentation_batch
-        result=self.smoother.request(key,sources,lambda task:presentation_batch(sources,fill,config,image,task,self.smoother.geometry_cache),immediate=bool(getattr(self,'_presentation_transition_pending',False)))
+        result=self.smoother.request(key,sources,lambda task:presentation_batch(sources,fill,config,image,task,self.smoother.geometry_cache),immediate=bool(getattr(self,'_presentation_transition_pending',False)),retain=config['enabled'])
         self._presentation_ready=result is not None
         source_geometry={label['id']:label['geometry'] for label in sources}
         if hold and result is not None and all(source_geometry.get(i) is geometry for i,geometry in hold[2].items()):
