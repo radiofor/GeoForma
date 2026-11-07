@@ -82,8 +82,15 @@ def test_autosave_unavailable_resource_directory_shows_failure(automatic_project
     monkeypatch.setattr('geoforma.resource_location.current_resource_dir',unavailable)
     w.project['images']=[raster_image];w.mark_dirty()
     assert w.autosave() is False
-    assert '自动保存未完成' in w.statusBar().currentMessage()
+    assert '自动保存未完成' in w.statusBar()._error_toast.label.text()
     assert w.dirty and w.autosave_task is None
+
+
+def test_close_with_blocked_migration_reports_error_without_losing_work(automatic_project,monkeypatch,raster_image):
+    w,app,_=automatic_project;w.project['images']=[raster_image];w.mark_dirty()
+    monkeypatch.setattr('geoforma.resource_migration.pending_migration',lambda:True)
+    assert not w.close() and w.isVisible() and w.dirty and not w.closing
+    assert '资源迁移未完成' in w.statusBar()._error_toast.label.text()
 
 
 def block_first_write(monkeypatch):
@@ -115,15 +122,68 @@ def test_cancelled_first_save_keeps_action_available(automatic_project,monkeypat
     assert w.project_path is None and w.project_actions['save'].isEnabled()
 
 
+def test_project_save_and_open_permission_errors_use_readable_toast(automatic_project,monkeypatch):
+    w,app,tmp=automatic_project
+    monkeypatch.setattr(QFileDialog,'getSaveFileName',lambda *args:(str(tmp/'denied.gfm'),''))
+    def denied(*args,**kwargs):raise PermissionError(13,'Access denied')
+    monkeypatch.setattr('geoforma.controllers.projects.save_project',denied)
+    w.save();assert '项目保存失败：没有访问权限' in w.statusBar()._error_toast.label.text()
+    assert 'PermissionError' in w.log.toPlainText() and w.project_path is None
+    monkeypatch.setattr('geoforma.storage.load_project',denied)
+    assert not w.open_project(tmp/'denied.gfm')
+    assert w.statusBar()._error_toast.pending
+    w.statusBar()._error_toast._advance()
+    assert '打开项目失败：没有访问权限' in w.statusBar()._error_toast.label.text()
+
+
 def test_moved_project_is_not_recreated_by_autosave(automatic_project,monkeypatch):
     w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch)
     moved=tmp/'moved.gfm';path.rename(moved)
     w.project['classes'][0]['name']='等待保存';w.mark_dirty();w.autosave()
     until(app,lambda:w.autosave_task is None)
     assert not path.exists() and w.dirty and w.project_saves.failed
+    bar=w.statusBar();assert '项目文件不存在或已移动' in bar._error_toast.label.text()
+    bar.showMessage('其他操作完成',5);bar.set_task_active(True)
+    assert '项目文件不存在或已移动' in bar._error_toast.label.text()
+    bar.clearMessage();bar.set_task_active(False)
     assert load_project(moved)['classes'][0]['name']=='类别 1'
     moved.rename(path);w.autosave();saved(w,app)
+    assert not bar._error_toast.label.isVisible()
     assert load_project(path)['classes'][0]['name']=='等待保存'
+
+
+@pytest.mark.parametrize('old_fails',[False,True])
+def test_old_project_save_completion_cannot_replace_new_project_error(automatic_project,monkeypatch,old_fails):
+    w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch)
+    started=threading.Event();release=threading.Event()
+    def delayed(project,target,**kwargs):
+        started.set();assert release.wait(5)
+        if old_fails:raise OSError('旧项目保存失败')
+        save_project(project,target,**kwargs)
+    monkeypatch.setattr('geoforma.controllers.projects.save_project',delayed)
+    try:
+        w.project['classes'][0]['name']='等待写入';w.mark_dirty();w.autosave();until(app,started.is_set)
+        old_epoch=w.project_epoch;w.new();assert w.project_epoch!=old_epoch
+        key=('autosave',w.project_epoch,'unavailable');w.report_autosave_problem(key,'新项目无法保存')
+        release.set();until(app,lambda:w.autosave_task is None and not w.project_saves.pending)
+        assert w.statusBar()._error_toast.label.text()=='新项目无法保存'
+        assert ('autosave',old_epoch,'unavailable') not in w._autosave_problems
+    finally:release.set()
+
+
+def test_repeated_autosave_failure_reports_once_until_recovery(automatic_project,monkeypatch):
+    w,app,tmp=automatic_project;path=first_save(w,tmp,monkeypatch)
+    moved=tmp/'moved.gfm';path.rename(moved);shown=[]
+    bar=w.statusBar();original=bar.report_error
+    def report(message,source=None):shown.append(message);original(message,source=source)
+    monkeypatch.setattr(bar,'report_error',report)
+    w.mark_dirty();w.autosave();until(app,lambda:w.autosave_task is None)
+    w.autosave();until(app,lambda:w.autosave_task is None)
+    assert len(shown)==1 and '项目文件不存在或已移动' in shown[0]
+    moved.rename(path);w.autosave();saved(w,app)
+    path.rename(moved);w.mark_dirty();w.autosave();until(app,lambda:w.autosave_task is None)
+    assert len(shown)==2
+    moved.rename(path);w.autosave();saved(w,app)
 
 
 def test_autosave_overwrites_external_edits_with_current_project(automatic_project,monkeypatch):

@@ -77,7 +77,7 @@ def test_small_draw_keeps_vertices_when_no_pixel_is_covered(workbench):
     for point in ((45.01,45.01),(45.1,45.01),(45.01,45.1)):w.add_manual_vertex(*point)
     vertices=copy.deepcopy(w.draft['manual_vertices']);w.finish_manual_polygon()
     assert w.draft['manual_vertices']==vertices and not w.draft.get('geometry')
-    assert '像元' in w.statusBar().currentMessage()
+    assert '像元' in w.statusBar()._error_toast.label.text()
 
 
 def _dumbbell(x,y):

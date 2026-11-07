@@ -58,3 +58,15 @@ def test_ui_automatic_clip_is_atomic_and_undoable(monkeypatch):
     w.redo_label();assert len(w.project['labels'])==2 and shape(w.project['labels'][1]['geometry']).area==50
     assert_no_overlaps(w.project['labels'])
     w.dirty=False;w.close();app.processEvents()
+
+
+def test_fully_covered_label_reports_nonmodal_failure():
+    from PySide6.QtWidgets import QApplication
+    from geoforma.window import MainWindow
+    app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.autosave=lambda:None
+    w.image={'id':'image','width':1000,'height':1000,'ready':True,'model_recipe':None,'display_recipe':None}
+    w.project['labels']=[label('old',box(0,0,10,10))];before=copy.deepcopy(w.project['labels'])
+    w.draft={'geometry':mapping(box(1,1,2,2)),'points':[],'pending':False};w.confirm()
+    assert w.project['labels']==before and w.draft['geometry']
+    assert '轮廓被已有标签完全占用' in w.statusBar()._error_toast.label.text()
+    w.dirty=False;w.close();app.processEvents()

@@ -6,32 +6,32 @@
       "file": "screenshots\\01-main-window.png",
       "width": 1440,
       "height": 960,
-      "bytes": 238650,
-      "sha256": "5f0cbe39459a7cc9f9b0bd6e5d39b70bdd0496fb71319cdd62ea88fd5bc748b1",
+      "bytes": 236699,
+      "sha256": "a487f1140571d38f5684d1572329cc610042daca82145fdbad94a8db0d4f41a4",
       "source": "当前软件界面与合成影像示例"
     },
     {
       "file": "screenshots\\02-image-import.png",
       "width": 1440,
       "height": 960,
-      "bytes": 219531,
-      "sha256": "d6231431cbe4cd879b4e8211607ff4c6d176ea8f6d745f9c7ad9db407b6f9034",
+      "bytes": 217922,
+      "sha256": "a72c8fc9736fd82ced581b58d52127a24d3eb7c92662196678da46a32d00c009",
       "source": "当前软件界面与合成影像示例"
     },
     {
       "file": "screenshots\\03-label-export.png",
       "width": 1440,
       "height": 960,
-      "bytes": 235301,
-      "sha256": "323e9959132e14b2e0bd2b17488619acbd31a505cff87e2153a65a1045d49a12",
+      "bytes": 233633,
+      "sha256": "a332aa7ad9682d1f8a4df034ceeb9da047e1eedd6930af3e56d7bdcc42c393e7",
       "source": "当前软件界面与合成影像示例"
     },
     {
       "file": "screenshots\\04-reshape.png",
       "width": 1440,
       "height": 960,
-      "bytes": 236607,
-      "sha256": "cfe749bdc22cf3e10e82c5cc4e3527ad4fb9facafcae3a2d3d0bb7d5aa378da1",
+      "bytes": 234947,
+      "sha256": "3a079e75fc483bcae974226a3cc3002df96ea866a7fb868b06ab8af49a80e8c9",
       "source": "当前软件界面与合成影像示例"
     },
     {

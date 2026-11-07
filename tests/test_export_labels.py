@@ -183,6 +183,7 @@ def test_format_selector_controls_dialog_and_actual_output(workbench,source,tmp_
     w.export();wait()
     path=tmp_path/('selected.v2'+suffix);dataset=ogr.Open(str(path))
     assert dataset is not None and dataset.GetDriver().GetName()==driver
+    assert w.statusBar().currentMessage()=='标签已导出 · '+path.name
     assert filter_text in dialog[0][3] and Path(dialog[0][2]).name==Path(source['path']).stem+'_labels' and not errors
     dataset=None
 

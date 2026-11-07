@@ -157,5 +157,7 @@ def test_bad_project_cannot_partially_replace_live_workbench(workbench,damage):
     elif damage=='range':bad['workspace']={'candidate_range':[0,'bad',False]}
     elif damage=='view':image['mode_sessions']={'individual':{'view':[0,0,float('inf'),10]}}
     path=tmp/'bad_project.gfm';path.write_text(json.dumps(bad),encoding='utf-8')
-    errors=[];w.error=errors.append;w.open_project(path)
-    assert errors and w.project is original and w.project['labels'][0]['id']=='target'
+    before=path.read_bytes();w.show();app.processEvents()
+    assert not w.open_project(path)
+    assert w.statusBar()._error_toast.label.isVisible() and '打开项目失败' in w.statusBar()._error_toast.label.text()
+    assert w.project is original and w.project['labels'][0]['id']=='target' and path.read_bytes()==before

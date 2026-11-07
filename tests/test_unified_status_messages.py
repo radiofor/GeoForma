@@ -10,6 +10,18 @@ def settle(app):
     for _ in range(8):app.processEvents();QTest.qWait(1)
 
 
+def test_status_areas_have_distinct_borders_even_when_idle(workbench):
+    w,app,_,_=workbench;w.resize(1024,700);w.show();settle(app);bar=w.statusBar()
+    assert not w.context_status.text() and not bar.currentMessage()
+    assert w.progress_panel.isVisible() and bar.text_slot.isVisible()
+    assert w.progress_panel.height()==bar.text_slot.height()==34
+    assert w.progress_panel.width()==402
+    assert 'border:1px solid #d2e8df' in w.progress_panel.styleSheet()
+    assert 'border:1px solid #d5e3ed' in bar.text_slot.styleSheet()
+    bar.showMessage('准备影像');settle(app)
+    assert bar.text_slot.height()==34 and bar.text_slot.width()>120
+
+
 def test_status_message_priority_and_no_persistent_model_name(workbench):
     w,app,_,_=workbench;w.show();settle(app);bar=w.statusBar()
     w.context_status.setText('当前编辑状态');settle(app)
@@ -33,9 +45,11 @@ def test_message_slot_fills_available_width_and_idle_context_is_empty(workbench)
     row=bar.content.layout();right=row.contentsMargins().right()
     assert bar.text_slot.geometry().right()==bar.content.width()-right-1
     w.background_activity.delay=0;w.background_activity.set('raster','显示影像');settle(app)
+    w.background_activity.set('labels','准备标签');settle(app)
     assert w.background_button.isVisible()
     assert bar.text_slot.geometry().right()<w.background_button.geometry().left()
     w.background_activity.set('raster','');settle(app)
+    w.background_activity.set('labels','');settle(app)
     assert bar.text_slot.geometry().right()==bar.content.width()-right-1
 
 
@@ -46,6 +60,7 @@ def test_long_status_message_wraps_and_is_scrollable_in_status_bar(workbench):
     detail=bar.notice
     assert bar.text_slot.currentWidget() is detail and detail.text()==text
     assert detail.line_count()>4 and bar.height()>42
+    assert w.progress_panel.height()==bar.text_slot.height()
     assert detail.scrollbar.isVisible() and detail.scrollbar.maximum()>0
     pos=QPoint(40,10)
     wheel=QWheelEvent(QPointF(pos),QPointF(detail.mapToGlobal(pos)),QPoint(),QPoint(0,-120),

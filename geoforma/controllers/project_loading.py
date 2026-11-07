@@ -29,18 +29,25 @@ class ProjectLoadingWorkflow:
         from ..missing_sources import missing_sources,relink_source,remove_source
         changed=False
         for kind,source in missing_sources(project):
+            relink_error=None
             while True:
                 name=source.get('name') or Path(source['path']).name
                 detail=('移除影像将同时移除其标注，并清除项目的撤销和重做记录。' if kind=='images' else '移除参考影像不会删除磁盘上的文件。')
                 box=QMessageBox(QMessageBox.Icon.Warning,'找不到数据',f'{name}\n原路径：{source["path"]}\n\n{detail}',parent=self)
                 locate=box.addButton('选择新位置',QMessageBox.ButtonRole.AcceptRole)
                 remove=box.addButton('从项目移除',QMessageBox.ButtonRole.DestructiveRole)
-                box.addButton('取消打开',QMessageBox.ButtonRole.RejectRole);box.exec()
+                box.addButton('取消打开',QMessageBox.ButtonRole.RejectRole)
+                if relink_error:
+                    message=relink_error;relink_error=None
+                    QTimer.singleShot(0,box,lambda current=box,text=message:self.statusBar().report_error(text,source='missing_source',parent=current))
+                box.exec()
                 if box.clickedButton()==locate:
                     path,_=QFileDialog.getOpenFileName(self,'选择数据的新位置',str(Path(source['path']).parent),'影像文件 (*.tif *.tiff *.vrt *.img);;所有文件 (*)')
                     if not path:continue
                     try:relink_source(source,path,project,kind)
-                    except Exception as error:QMessageBox.warning(self,'无法使用所选数据',str(error));continue
+                    except Exception as error:
+                        from ..error_messages import user_message
+                        self.log_message(traceback.format_exc());relink_error='无法使用所选数据：'+user_message(error);continue
                     changed=True;break
                 if box.clickedButton()==remove:
                     if QMessageBox.question(self,'确认移除',f'确定从项目移除“{name}”吗？\n{detail}')!=QMessageBox.StandardButton.Yes:continue
@@ -54,7 +61,7 @@ class ProjectLoadingWorkflow:
         try:pending=bool(pending_migration())
         except (OSError,ValueError,RuntimeError):pending=True
         if pending:
-            self.statusBar().showMessage('请先完成资源迁移，再打开项目。',6000);return False
+            self.statusBar().report_error('请先完成资源迁移，再打开项目。');return False
         try:
             if self.autosave() is False:return False
             actual=Path(path)
@@ -157,6 +164,7 @@ class ProjectLoadingWorkflow:
             with blocked_controls(self):
                 self.preparation.reset();self.image_sessions.clear()
                 self.state=WorkbenchState(loaded.project,project_path=Path(path),image=loaded.image,draft=loaded.draft,mode_index=loaded.mode_index,project_epoch=epoch)
+                self.clear_autosave_problems()
                 self.runtime_status=runtime
                 self.label_lookup.clear();self.label_indexes.clear();self.label_index_key=None;self.label_index=None
                 self.view.path_cache.clear();self.view.layers.pixmap_cache.clear()

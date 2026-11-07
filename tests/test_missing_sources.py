@@ -73,6 +73,49 @@ def test_cancel_missing_image_keeps_project_and_file(automatic_project,monkeypat
     assert w.project is old and path.read_bytes()==before
 
 
+def test_invalid_relink_error_appears_inside_reopened_choice_dialog(automatic_project,monkeypatch,raster_image):
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication,QFileDialog,QMessageBox
+    w,app,tmp=automatic_project;project=new_project();image=copy.deepcopy(raster_image)
+    image['path']=str(tmp/'missing.tif');project['images']=[image]
+    monkeypatch.setattr(QFileDialog,'getOpenFileName',lambda *args:(str(tmp/'not-a-raster.tif'),''))
+    def denied(*args):raise PermissionError(13,'Access denied')
+    monkeypatch.setattr('geoforma.missing_sources.relink_source',denied)
+    observed=[]
+    def choose_location():
+        box=QApplication.activeModalWidget();assert isinstance(box,QMessageBox)
+        next(button for button in box.buttons() if button.text()=='选择新位置').click()
+    def check_error_and_cancel():
+        box=QApplication.activeModalWidget();assert isinstance(box,QMessageBox)
+        toast=box._error_toast
+        observed.append((toast.label.isVisible(),toast.label.parent() is box,toast.label.text(),toast.timer.interval()))
+        next(button for button in box.buttons() if button.text()=='取消打开').click()
+    def safety_close():
+        box=QApplication.activeModalWidget()
+        if isinstance(box,QMessageBox):box.reject()
+    safety=QTimer(w);safety.setSingleShot(True);safety.timeout.connect(safety_close);safety.start(5000)
+    QTimer.singleShot(0,choose_location);QTimer.singleShot(100,check_error_and_cancel)
+    try:assert w.resolve_missing_project_sources(project) is None
+    finally:safety.stop()
+    assert len(observed)==1 and observed[0][0:2]==(True,True)
+    assert '无法使用所选数据' in observed[0][2] and observed[0][3]==2000
+    assert '没有访问权限' in observed[0][2] and 'PermissionError' in w.log.toPlainText()
+
+
+def test_invalid_band_range_uses_nonblocking_error(automatic_project,monkeypatch,raster_image):
+    w,app,_=automatic_project;w.image=raster_image;w.project['images']=[raster_image]
+    monkeypatch.setattr('geoforma.controllers.images.BandsDialog',lambda *args:object())
+    monkeypatch.setattr('geoforma.controllers.images.dialog_result',lambda *args:(True,([1,2,3],[(5,5)]*3,1,None)))
+    w.configure_bands()
+    assert '最大值必须大于最小值' in w.statusBar()._error_toast.label.text()
+
+
+def test_export_without_labels_uses_status_bar(automatic_project,raster_image):
+    w,app,_=automatic_project;w.image=raster_image;w.project['images']=[raster_image]
+    w.project['labels']=[];w.export()
+    assert w.statusBar().currentMessage()=='当前影像没有可导出的标签。'
+
+
 def test_open_rejects_removed_candidate_labels_without_modifying_project(automatic_project,raster_image):
     from shapely.geometry import box,mapping
     w,app,tmp=automatic_project;project=new_project();project['images']=[copy.deepcopy(raster_image)]

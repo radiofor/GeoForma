@@ -13,8 +13,7 @@ def test_no_crossing_reports_reason_in_status_bar(workbench):
     for point in ((50,50),(60,60)):w.add_reshape_point(*point)
     w.finish_reshape();wait(w,app);app.processEvents()
     assert w.project['labels']==before and w.reshape_session is not None
-    assert w.statusBar().currentMessage()=='重塑线未穿过标注边界，请调整编辑线。'
-    assert w.statusBar().text_slot.currentWidget() is w.statusBar().notice
+    assert w.statusBar()._error_toast.label.text()=='重塑未完成：重塑线未穿过标注边界，请调整编辑线。'
 
 
 def test_worker_error_reports_reason_without_overwriting_annotation(workbench,monkeypatch):
@@ -26,8 +25,7 @@ def test_worker_error_reports_reason_without_overwriting_annotation(workbench,mo
     monkeypatch.setattr(reshape,'reshape_geometry',fail)
     w.finish_reshape();wait(w,app);app.processEvents()
     assert w.project['labels']==before and w.reshape_session is not None
-    assert '小数边界与编辑线无法安全匹配' in w.statusBar().currentMessage()
-    assert w.statusBar().text_slot.currentWidget() is w.statusBar().notice
+    assert '小数边界与编辑线无法安全匹配' in w.statusBar()._error_toast.label.text()
 
 
 def test_invalid_result_reports_reason_in_status_bar(workbench):
@@ -37,4 +35,4 @@ def test_invalid_result_reports_reason_in_status_bar(workbench):
             'alternate':False,'window':[0,0,2,2],'added_pixels':0,'removed_pixels':0}
     w.apply_reshape_results(w.reshape_session,[('label',label)],[result]);app.processEvents()
     assert w.project['labels'][0]==label and w.reshape_session is not None
-    assert w.statusBar().currentMessage() and w.statusBar().text_slot.currentWidget() is w.statusBar().notice
+    assert w.statusBar()._error_toast.label.text()

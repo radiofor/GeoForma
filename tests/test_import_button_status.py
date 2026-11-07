@@ -46,7 +46,7 @@ def test_reference_import_keeps_button_label_and_status_bar_progress(workbench):
     try:
         w.run('导入参考：NDWI',work,lambda _:None,kind='reference_import')
         deadline=time.monotonic()+3
-        while not started.is_set() or w.progress_count.text()!='参考 1 / 2':
+        while not started.is_set() or w.progress_count_text!='参考 1 / 2':
             app.processEvents();QTest.qWait(2);assert time.monotonic()<deadline
         button=w.import_reference_button
         assert not button.isEnabled() and button.text()=='导入参考' and button.icon().isNull()

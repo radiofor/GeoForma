@@ -52,13 +52,14 @@ def test_failed_autosave_dismisses_exit_feedback_and_keeps_work(tmp_path,monkeyp
     monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path/'data'))
     import geoforma.controllers.projects as projects
     app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.show();w.project['images']=[{'id':'image','path':'source.tif'}];w.mark_dirty()
-    started=threading.Event();release=threading.Event();warnings=[]
+    started=threading.Event();release=threading.Event()
     def save(*args,**kwargs):started.set();release.wait(3);raise OSError('test disk error')
-    monkeypatch.setattr(projects,'save_project',save);monkeypatch.setattr(QMessageBox,'warning',lambda *args:warnings.append(args))
+    monkeypatch.setattr(projects,'save_project',save)
     try:
         w.close();wait(app,started.is_set)
         release.set();wait(app,lambda:w.autosave_task is None)
-        assert warnings and not w.closing and not hasattr(w,'shutdown_dialog') and w.isVisible() and w.dirty
+        assert w.statusBar()._error_toast.label.isVisible() and 'test disk error' in w.statusBar()._error_toast.label.text()
+        assert not w.closing and not hasattr(w,'shutdown_dialog') and w.isVisible() and w.dirty
     finally:
         release.set();wait(app,lambda:w.autosave_task is None);w.project_saves.pending.clear();w.project_saves.failed.clear();w.dirty=False;w.close();app.processEvents()
 
@@ -73,10 +74,11 @@ def test_idle_exit_needs_no_waiting_dialog(tmp_path,monkeypatch):
 def test_immediate_autosave_refusal_keeps_window_and_dirty_work(tmp_path,monkeypatch):
     monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path/'data'))
     app=QApplication.instance() or QApplication([]);w=MainWindow(auto_prepare=False);w.show()
-    w.dirty=True;messages=[]
-    monkeypatch.setattr(w,'autosave',lambda:False)
-    monkeypatch.setattr(QMessageBox,'warning',lambda *args:messages.append(args))
-    assert not w.close() and w.isVisible() and w.dirty and not w.closing and messages
+    w.dirty=True
+    def refuse():w.statusBar().report_error('自动保存未完成');return False
+    monkeypatch.setattr(w,'autosave',refuse)
+    assert not w.close() and w.isVisible() and w.dirty and not w.closing
+    assert w.statusBar()._error_toast.label.isVisible()
     monkeypatch.setattr(w,'autosave',lambda:None);w.dirty=False;w.close();app.processEvents()
 
 

@@ -72,7 +72,7 @@ class MainWindow(ResourceWorkflow,ReferenceWorkflow,WorkbenchActions,TaskWorkflo
         self.raster_renderer.activity.connect(lambda task:setattr(self,'render_task',task));self.raster_renderer.rendered.connect(self.apply_raster);self.raster_renderer.error.connect(self.log_message);self.raster_renderer.idle.connect(self.render_finished)
         self.raster_renderer.error.connect(lambda message:self.view.show_raster_error())
         self.raster_renderer.error.connect(self.reference_render_failed)
-        self.prompt_revision=0;self.pending_task_retry=None;self.pending_prefetch_work=None
+        self.prompt_revision=0;self.pending_prefetch_work=None
         self.auto_apply_timer=QTimer(self);self.auto_apply_timer.setSingleShot(True);self.auto_apply_timer.setInterval(35);self.auto_apply_timer.timeout.connect(self.apply_automatically)
         self.view.reshapePoint.connect(self.add_reshape_point);self.view.reshapeFinished.connect(self.finish_reshape);self.view.reshapeUndo.connect(self.undo_reshape_point);self.view.reshapeCancelled.connect(self.cancel_reshape)
         self.view.reshapeTarget.connect(self.pick_reshape_target)

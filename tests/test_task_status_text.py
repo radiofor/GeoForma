@@ -1,6 +1,6 @@
 """The status badge, meter and details each carry different information."""
 import pytest
-from geoforma.task_status import task_detail,task_subject
+from geoforma.task_status import progress_name,task_detail,task_message,task_subject
 from geoforma.image_list import ImportPlan
 
 
@@ -41,3 +41,16 @@ def test_filenames_versions_and_paths_are_preserved(name):
 def test_import_summary_omits_zero_counts_and_repeated_action():
     assert ImportPlan().summary(12)=='成功 12 幅'
     assert ImportPlan(duplicates=2,errors=['bad.tif']).summary(10)=='成功 10 幅 · 重复 2 项 · 失败 1 项'
+
+
+@pytest.mark.parametrize('stage,expected',[
+    ('检查影像引用与模型…','检查输入'),
+    ('初始化模型进程…','初始化推理'),
+    ('加载 SAM 模型…','加载模型'),
+    ('检查完整影像缓存','检查影像缓存'),
+    ('准备影像 1/100','影像预处理'),
+])
+def test_preparation_stage_names_explain_the_progress_meter(stage,expected):
+    assert progress_name('preparation',stage)==expected
+    message=task_message('准备影像：lake.tif',stage,'preparation','SAM 2.1 · Large','影像 1/2')
+    assert 'lake.tif' in message and '影像 1/2' in message

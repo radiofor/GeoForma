@@ -97,14 +97,13 @@ def test_overlap_component_policy_follows_checkbox(workbench,enabled,same_class)
     w.redo_label();assert unary_union([shape(l['geometry']) for l in w.project['labels'][1:]]).equals(expected)
 
 
-def test_fully_covered_label_retains_draft_and_history(workbench,monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-    w,app=workbench;messages=[]
-    monkeypatch.setattr(QMessageBox,'information',lambda *args:messages.append(args[2]))
+def test_fully_covered_label_retains_draft_and_history(workbench):
+    w,app=workbench
     blocker=dict(id='blocker',image_id='image',class_id=w.classes.currentData(),status='confirmed',annotation_mode='individual',geometry=mapping(box(0,0,10,10)))
     w.project['labels']=[copy.deepcopy(blocker)];w.draft={'geometry':mapping(box(1,1,5,5)),'pending':False}
     draft=copy.deepcopy(w.draft);w.confirm()
-    assert w.project['labels']==[blocker] and w.draft==draft and not w.label_undo and len(messages)==1
+    assert w.project['labels']==[blocker] and w.draft==draft and not w.label_undo
+    assert '轮廓被已有标签完全占用' in w.statusBar()._error_toast.label.text()
 
 
 def test_unchecked_saves_independent_polygons(workbench):

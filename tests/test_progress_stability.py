@@ -33,7 +33,7 @@ def test_progress_text_repaints_without_relayout_of_either_sidebar(workbench):
         for i in range(2,101):
             w.task_progress(i,100,f'准备影像 {i}/100');app.processEvents()
         assert not spy.events
-        assert w.progress_count.text()=='块 100 / 100'
+        assert w.progress_count_text=='块 100 / 100'
         assert w.task_text.accessibleName()==w.task_text.text()
     finally:
         app.removeEventFilter(spy);w.task=None;w.task_kind=None

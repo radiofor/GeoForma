@@ -49,7 +49,7 @@ class ReshapeWorkflow:
     def reshape_error(self,session,message,*,log=True):
         session['error']=message
         if log:self.log_message(message)
-        self.statusBar().showMessage(str(message),5000)
+        self.statusBar().report_error('重塑未完成：'+str(message),source='reshape')
 
     def model_prompts_locked(self,include_reshape=True):
         if include_reshape and self.reshape_session is not None:return True
@@ -175,10 +175,12 @@ class ReshapeWorkflow:
             result=reshape_raster(image,geometry,stroke,blockers,None,single,alternate,task,**kwargs)
             return result
         def done(result):
-            if self.reshape_session is not session or self.annotation_context()!=context:return
+            if self.reshape_session is not session or self.annotation_context()!=context:
+                self.task_outcome='cancelled';return
             if self.task and self.task.cancel_event.is_set():return
             current=self.reshape_current(session)
-            if not current or current['geometry']!=label['geometry']:return
+            if not current or current['geometry']!=label['geometry']:
+                self.task_outcome='failed';self.reshape_error(session,'标签已变化，请重新重塑。');return
             # Task completion stages this result and removes the construction line.
             result_task[0]=self.task
             session['preview']=result
@@ -194,7 +196,7 @@ class ReshapeWorkflow:
             if pending is not None and pending is not self.pending_prefetch_work:
                 session.pop('_pending_prefetch',None)
             if self.closing or result_task[0] and result_task[0].cancel_event.is_set():return
-            if self.reshape_session is session and session.get('preview'):self.commit_reshape()
+            if self.reshape_session is session and session.get('preview'):return self.commit_reshape()
         previous_pending=self.pending_prefetch_work
         self.run(ui_text('reshape.processing'),work,done,kind='reshape',on_error=failed,on_finished=completed,
                  deferred_valid=lambda:_reshape_deferred_current(self,session,context,stroke,alternate,include_holes,single))
@@ -293,7 +295,7 @@ class ReshapeWorkflow:
                 session.pop('_pending_prefetch',None)
             if self.closing or result_task[0] and result_task[0].cancel_event.is_set():return
             if self.reshape_session is not session or self.annotation_context()!=context or not result_holder:return
-            targets,results=result_holder[0];self.apply_reshape_results(session,targets,results)
+            targets,results=result_holder[0];return self.apply_reshape_results(session,targets,results)
         previous_pending=self.pending_prefetch_work
         started=self.run(ui_text('reshape.processing'),work,done,kind='reshape',on_error=failed,on_finished=completed,
                          deferred_valid=lambda:_reshape_deferred_current(self,session,context,stroke,alternate,include_holes,single))
@@ -303,10 +305,11 @@ class ReshapeWorkflow:
 
     def commit_reshape(self):
         session=self.reshape_session
-        if not session or self.foreground_task_active() or not session['preview']:return
+        if not session or self.foreground_task_active() or not session['preview']:return False
         current=self.reshape_current(session)
-        if not current or self.annotation_context()!=session['context'] or current['geometry']!=session['label']['geometry']:return
-        self.apply_reshape_results(session,[(session['target'],current)],[session['preview']])
+        if not current or self.annotation_context()!=session['context'] or current['geometry']!=session['label']['geometry']:
+            self.reshape_error(session,'标签已变化，请重新重塑。');return False
+        return self.apply_reshape_results(session,[(session['target'],current)],[session['preview']])
 
     def apply_reshape_results(self,session,targets,results):
         """Commit saved targets together while preserving any unrelated draft."""
@@ -314,7 +317,7 @@ class ReshapeWorkflow:
         from ..label_parts import split_label
         from ..tool_state import has_unsaved_annotation
         if has_unsaved_annotation(self.draft) or any(target!='label' for target,_ in targets):
-            self.reshape_error(session,'请先保存或取消未完成的标注。');return
+            self.reshape_error(session,'请先保存或取消未完成的标注。');return False
         if len(targets)!=len(results):raise ValueError('重塑结果数量不一致。')
         originals=self.current_labels();by_id={label['id']:label for label in originals}
         replacements={};history=[];target_ids={label['id'] for _,label in targets}
@@ -341,12 +344,12 @@ class ReshapeWorkflow:
                 history.extend((part['id'],None,index+i) for i,part in enumerate(parts[1:],1))
             assert_no_overlaps([part for parts in replacements.values() for part in parts])
         except Exception as error:
-            session['preview']=None;self.reshape_error(session,str(error));self.update_controls();return
+            session['preview']=None;self.reshape_error(session,str(error));self.update_controls();return False
         self.retain_reshape_smoothing(replacements)
         self.record_label_operation(history)
         if replacements:
             self.project['labels']=[part for item in self.project['labels'] for part in replacements.get(item['id'],[item])]
-        self.leave_reshape();self.refresh_labels();self.mark_dirty();self.autosave()
+        self.leave_reshape();self.refresh_labels();self.mark_dirty();self.autosave();return True
 
     def cancel_reshape(self):
         if self.reshape_session is None and not self.view.reshape_picking:return

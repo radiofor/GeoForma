@@ -72,15 +72,19 @@ def test_unavailable_resource_aborts_shutdown_without_losing_dirty_work(workspac
     from geoforma.resource_location import set_resource_parent
     from PySide6.QtWidgets import QMessageBox
     w,app,tmp=workspace
+    w.show();app.processEvents()
     parent=tmp/'chosen';parent.mkdir();selected=set_resource_parent(parent)
     (selected/'.geoforma-resources').unlink()
-    warnings=[];monkeypatch.setattr(QMessageBox,'warning',lambda *args:warnings.append(args))
+    monkeypatch.setattr(QMessageBox,'warning',lambda *args:pytest.fail('失败提示不得阻塞'))
     w.project['images']=[{'id':'image','path':'source.tif'}];w.mark_dirty()
     w.closing=True;w.autosave()
     deadline=time.monotonic()+5
     while w.autosave_task and time.monotonic()<deadline:app.processEvents();time.sleep(.002)
     app.processEvents()
-    assert w.autosave_task is None and w.dirty and not w.closing and warnings
+    toast=w.statusBar()._error_toast
+    assert w.autosave_task is None and w.dirty and not w.closing and w.isVisible()
+    assert toast.label.isVisible() and toast.timer.interval()==2000
+    assert '自动保存' in toast.label.text()
 
 
 def test_formal_save_records_recovery_entry(workspace):

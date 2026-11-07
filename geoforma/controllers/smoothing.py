@@ -142,5 +142,5 @@ class SmoothingWorkflow:
             getattr(self,'_presentation_transition_context',None)==self.annotation_context()):
             self._presentation_failed_context=self.annotation_context()
         self._presentation_transition_pending=False;self._reshape_smoothing_hold=None
-        self.log_message(message);self.statusBar().showMessage('平滑处理失败，请减小平滑值或关闭平滑。',5000)
+        self.log_message(message);self.statusBar().report_error('平滑处理失败，请减小平滑值或关闭平滑。',source='smoothing')
         self.redraw();self.update_controls()

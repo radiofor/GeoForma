@@ -137,4 +137,4 @@ class ReferenceWorkflow:
         if not self.reference_transition_pending:return
         self.display_reference=getattr(self,'visible_reference',None);self.reference_transition_pending=False;self.transition_detail=None
         from ..error_messages import user_message
-        self.sync_reference_buttons();self.statusBar().showMessage('参考读取失败 · '+user_message(message),8000)
+        self.sync_reference_buttons();self.statusBar().report_error('读取参考影像失败：'+user_message(message),source='reference_read')

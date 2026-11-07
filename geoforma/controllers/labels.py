@@ -4,7 +4,6 @@ from ..ui.text import ui_text
 import copy
 from datetime import datetime
 from PySide6.QtCore import Qt, QRectF
-from PySide6.QtWidgets import QMessageBox
 from shapely.geometry import shape
 from ..domain import uid
 
@@ -169,7 +168,8 @@ class LabelWorkflow:
             result=resolve(label,self.current_labels(),'clip')
             overlaps=result['blocked_ids']
             if result['geometry'] is None:
-                QMessageBox.information(self,ui_text('labels.confirm.008'),ui_text('labels.confirm.009'));return
+                message='无法保存标签：轮廓被已有标签完全占用，请调整轮廓后重试。'
+                self.log_message(message);self.statusBar().report_error(message,source='label_save');return
             label['geometry']=result['geometry']
             single=self.single_polygon.isChecked()
             if single:

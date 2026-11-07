@@ -51,7 +51,7 @@ def test_successful_reshape_does_not_show_a_status_prompt(workbench,monkeypatch)
 def test_worker_failure_is_recorded_and_reported_in_status_bar(workbench,monkeypatch):
     from geoforma import reshape
     w,app,_=workbench;messages=[];before=copy.deepcopy(w.project['labels'])
-    monkeypatch.setattr(w.statusBar(),'showMessage',lambda *args:messages.append(args))
+    monkeypatch.setattr(w.statusBar(),'report_error',lambda *args,**kwargs:messages.append(args))
     def fail(*args,**kwargs):raise ValueError('模拟重塑失败')
     monkeypatch.setattr(reshape,'reshape_geometry',fail)
     draw(w,app,OUT)
@@ -61,12 +61,24 @@ def test_worker_failure_is_recorded_and_reported_in_status_bar(workbench,monkeyp
     assert len([args for args in messages if args and '模拟重塑失败' in args[0]])==1
 
 
+def test_reshape_commit_failure_reports_failure_without_modifying_labels(workbench,monkeypatch):
+    from geoforma import label_conflicts
+    w,app,_=workbench;before=copy.deepcopy(w.project['labels']);states=[]
+    w.progress.model.changed.connect(lambda state:states.append(state.phase))
+    def fail(*args,**kwargs):raise ValueError('无法提交重塑结果')
+    monkeypatch.setattr(label_conflicts,'resolve',fail)
+    draw(w,app,OUT)
+    assert w.project['labels']==before and w.reshape_session
+    assert w.progress.phase=='failed' and 'complete' not in states
+    assert '无法提交重塑结果' in w.statusBar()._error_toast.label.text()
+
+
 @pytest.mark.parametrize('auto',[False,True])
 def test_cancelled_reshape_does_not_report_an_error(workbench,monkeypatch,auto):
     import threading
     from geoforma import reshape
     w,app,_=workbench;before=copy.deepcopy(w.project['labels']);started=threading.Event();messages=[]
-    monkeypatch.setattr(w.statusBar(),'showMessage',lambda *args:messages.append(args))
+    monkeypatch.setattr(w.statusBar(),'report_error',lambda *args,**kwargs:messages.append(args))
     def pending(*args,**kwargs):
         task=args[7];started.set()
         while not task.cancel_event.wait(.01):task.check()
@@ -225,7 +237,7 @@ def test_uncrossed_stroke_reports_error_in_status_bar(workbench):
     w,app,_=workbench;before=copy.deepcopy(w.project['labels'])
     draw(w,app,[[60,60],[70,70]])
     assert w.reshape_session and '未穿过' in w.reshape_session['error']
-    assert w.statusBar().currentMessage()==w.reshape_session['error']
+    assert w.reshape_session['error'] in w.statusBar()._error_toast.label.text()
     assert not hasattr(w,'reshape_info') and w.project['labels']==before and not w.draft
 
 

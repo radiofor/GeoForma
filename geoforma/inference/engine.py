@@ -11,7 +11,6 @@ class ModelEngine:
     def prepare_model(self,config,task):
         from ..weights import ensure_checkpoint
         config['checkpoint']=ensure_checkpoint(config,task);task.check()
-        task.signals.progress.emit(0,0,'加载 SAM 模型…')
         from ..execution_policy import resolve_execution
         execution=resolve_execution(config)
         config=dict(config,execution=execution)
@@ -20,7 +19,9 @@ class ModelEngine:
             self.close()
             from ..backend_factory import create_backend
             self.backend=create_backend(config)
-        self.backend.load(config);task.check()
+        def loading():
+            task.check();task.signals.progress.emit(0,0,'加载 SAM 模型…')
+        self.backend.load(config,on_load=loading);task.check()
         return {'checkpoint':config['checkpoint'],'device':self.backend.config['device'],'execution':execution}
 
     def close(self):

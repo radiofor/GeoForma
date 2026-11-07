@@ -32,6 +32,23 @@ def test_full_readiness_invalidates_model_recipe_source_and_weight_change(tmp_pa
     legacy=dict(im,prepared_full_signature=None);assert not fully_prepared(legacy,model)
 
 
+def test_project_readiness_checks_weight_once_and_matches_single_image_checks(tmp_path,monkeypatch):
+    import geoforma.workflow as workflow
+    weight=tmp_path/'model.pth';weight.write_bytes(b'weight')
+    model={'variant':'vit_b','device':'cpu','checkpoint':str(weight)}
+    images=[image(str(i)) for i in range(120)]
+    for item in images:item.update(ready=True,prepared_full_signature=preparation_signature(item,model))
+    original=workflow._preparation_checkpoint_stamp;calls=[]
+    def counted(value):calls.append(value);return original(value)
+    monkeypatch.setattr(workflow,'_preparation_checkpoint_stamp',counted)
+    assert workflow.all_fully_prepared(images,model) and len(calls)==1
+    images[-1]['prepared_full_signature']='stale';calls.clear()
+    assert not workflow.all_fully_prepared(images,model) and len(calls)==1
+    images[0]['ready']=False;calls.clear()
+    assert not workflow.all_fully_prepared(images,model) and not calls
+    assert not workflow.all_fully_prepared([],model)
+
+
 def test_preprocessing_uses_entire_grid_even_if_caller_passes_a_view(tmp_path,monkeypatch):
     monkeypatch.setenv('GEOFORMA_DATA_DIR',str(tmp_path))
     calls=[]

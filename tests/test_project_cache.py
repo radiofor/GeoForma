@@ -196,7 +196,9 @@ def test_invalid_project_does_not_clear_current_cache(workbench,tmp_path):
     w,app,wait,errors=workbench;root=data_dir()
     w.service.activate_project(root,w.project['cache_id']);cached=feature(root)
     path=tmp_path/'invalid.gfm';path.write_text('invalid')
-    assert not w.open_project(path) and cached.exists() and errors
+    original=w.project;before=cached.read_bytes();w.show();app.processEvents()
+    assert not w.open_project(path) and w.project is original and cached.read_bytes()==before
+    assert w.statusBar()._error_toast.label.isVisible() and '打开项目失败' in w.statusBar()._error_toast.label.text()
 
 
 def test_new_project_cleanup_runs_off_ui_thread(workbench,monkeypatch):

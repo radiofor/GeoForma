@@ -5,36 +5,24 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QMessageBox
 from ..tasks import Task
-from ..theme import set_tone
 from ..domain import digest
-from ..task_status import visible_detail
-from ..ui.modal import dialog_result
+from ..task_status import task_message
 
 
 class TaskWorkflow:
     def log_message(self,text):self.log.appendPlainText(datetime.now().strftime('%H:%M:%S')+'  '+str(text))
 
     def error(self,text):
-        from ..error_messages import user_message
+        from ..error_messages import user_message,operation_error
         self.last_error='' if ui_text('tasks.error.004') in text else user_message(text)
-        self.log_message(text);self.task_text.setText(self.last_error)
-        self.state_label.setText(ui_text('tasks.error.003'))
-        set_tone(self.state_label,'error')
-        if ui_text('tasks.error.004') not in text:
-            from ..error_messages import user_message
-            retry=getattr(self.task,'retry_operation',None)
-            buttons=QMessageBox.StandardButton.Ok
-            if retry:buttons|=QMessageBox.StandardButton.Retry
-            box=QMessageBox(QMessageBox.Icon.Warning,ui_text('errors.title'),user_message(text),buttons,self)
-            box.setDetailedText(text)
-            if retry:box.button(QMessageBox.StandardButton.Retry).setText('重试')
-            _,retry_requested=dialog_result(box,lambda dialog:dialog.clickedButton()==dialog.button(QMessageBox.StandardButton.Retry) and retry,owner=self)
-            # The dialog has its own event loop; finished may already have run.
-            if retry_requested:
-                if self.task is not None:self.pending_task_retry=retry
-                else:QTimer.singleShot(0,self,retry)
+        self.log_message(text)
+        if self.last_error:
+            operation=None
+            if self.task is not None or self.progress.model.state.phase=='running':operation=self.task_kind
+            if self.loading_task is not None and self.progress.model.state.kind in ('project_open','project_recovery'):
+                operation=self.progress.model.state.kind
+            self.statusBar().report_error(operation_error(operation,self.last_error))
 
     def run(self,title,fn,callback,kind=None,on_error=None,on_finished=None,deferred_valid=None):
         from ..operation_state import can_start_operation
@@ -43,7 +31,7 @@ class TaskWorkflow:
             self.run(title,fn,callback,kind,on_error,on_finished,deferred_valid)
         if kind in ('interactive','reshape','manual_polygon','history','export') and self.defer_for_prefetch(resume):return True
         if not can_start_operation(self):return False
-        retry_title=title;retry_fn=fn;context=self.annotation_context()
+        context=self.annotation_context()
         retry_model=(self.project_epoch,digest(self.project['model']))
         if kind in ('model','model_warmup','preparation','interactive') and not self.ensure_model_resources():return False
         self.invalidate_preview()
@@ -54,19 +42,7 @@ class TaskWorkflow:
                 root=require_resource_dir()
                 self.service.activate_project(root,owner)
                 return operation(task)
-        self.last_error='';self.pending_task_retry=None;task=Task(fn);self.task=task;self.task_kind=kind
-        def retry():
-            if self.closing:return False
-            if kind in ('model','model_warmup'):
-                if retry_model!=(self.project_epoch,digest(self.project['model'])):return False
-            elif context!=self.annotation_context():return False
-            if kind=='preparation' and self.image:
-                target=next((im for im in self.project['images'] if im['id']==retry_image_id),None)
-                if target is None:return False
-                self.preparation.paused=False;self.start_preparation(target);return True
-            return self.run(retry_title,retry_fn,callback,kind,on_error,on_finished)
-        retry_image_id=self.preparing_id
-        task.retry_operation=retry if kind in ('model','model_warmup','preparation') else None
+        self.last_error='';task=Task(fn);self.task=task;self.task_kind=kind
         if kind in ('model','model_warmup','preparation'):self.model_warmup_signature=retry_model[1]
         if kind in ('model','model_warmup'):
             from ..model_catalog import model_title
@@ -108,10 +84,14 @@ class TaskWorkflow:
                 self.last_error=ui_text('resources.stopped_hint') if kind=='resource_install' else '已准备的缓存保留' if kind=='preparation' else ''
                 self.log_message(message);return
             if kind=='resource_install':
-                from ..error_messages import user_message
-                self.last_error=user_message(message);self.log_message(message);return
+                from ..error_messages import user_message,operation_error
+                self.last_error=user_message(message);self.log_message(message);self.statusBar().report_error(operation_error(kind,self.last_error));return
             if kind=='reshape':
-                self.log_message(message);return
+                self.log_message(message)
+                if not on_error:
+                    from ..error_messages import user_message,operation_error
+                    self.statusBar().report_error(operation_error(kind,user_message(message)))
+                return
             self.error(message)
         progress=lambda current,total,text:self.task_progress(current,total,text) if self.task is task else None
         finished=lambda:self.finished(on_finished) if self.task is task else None
@@ -125,7 +105,7 @@ class TaskWorkflow:
             task.signals.error.connect(failed);task.signals.finished.connect(finished)
         self.progress_image_order=next(((i+1,len(self.project['images'])) for i,image in enumerate(self.project['images']) if kind=='preparation' and image['id']==self.preparing_id),None)
         self.update_progress_count(0,0)
-        self.task_text.setText(visible_detail(title,kind=kind));self.log_message(title);self.update_controls();self.pool.start(task);return True
+        self.task_text.setText(task_message(title,kind=kind,count=self.progress_count_text));self.log_message(title);self.update_controls();self.pool.start(task);return True
 
     def update_progress_count(self,current,total):
         order=getattr(self,'progress_image_order',None)
@@ -135,12 +115,12 @@ class TaskWorkflow:
         if self.task_kind=='preparation' and stage.startswith(('准备影像','检查完整影像缓存')):unit='块'
         elif self.task_kind in ('import','reference_import'):unit={'import':'影像','reference_import':'参考'}[self.task_kind]
         elif self.task_kind=='export' and stage.startswith('导出 ') and not stage.startswith('导出原始网格'):unit='标签'
-        count=(f'{unit} {value} / {total}' if unit else f'{100*value//total}%') if total>0 else ''
+        count=(f'{unit} {value} / {total}' if unit else '') if total>0 else ''
         if order:
             prefix=f'影像 {order[0]}/{order[1]}'
-            count=prefix if total<=0 else prefix+' · '+count
-        self.progress_count.setText(count)
-        self.progress_count.setVisible(bool(total>0 or order))
+            count=prefix+(' · '+count if count else '')
+        self.progress_count_text=count
+        self.progress_percent.setText(f'{100*value//total}%' if total>0 else '--%')
 
     def task_progress(self,current,total,text):
         cancelled=getattr(self.task,'cancel_event',None)
@@ -152,8 +132,8 @@ class TaskWorkflow:
             from ..model_catalog import model_title
             model=model_title(self.project['model'])
         else:model=None
-        self.task_text.setText(visible_detail(getattr(self,'task_title',''),text,self.task_kind,model=model))
         self.update_progress_count(current,total)
+        self.task_text.setText(task_message(getattr(self,'task_title',''),text,self.task_kind,model=model,count=self.progress_count_text))
         if self.task_kind=='preparation' and self.preparing_id:
             image=next((im for im in self.project['images'] if im['id']==self.preparing_id),None)
             if image and total and text.startswith(('准备影像','检查完整影像缓存')):image['preparation_progress']=[current,total];self.mark_dirty(background=True)
@@ -176,28 +156,29 @@ class TaskWorkflow:
                 target['preparation_state']=('queued' if target['id'] in self.preparation.ids else 'pending') if superseded else 'paused'
                 if not superseded:self.preparation.add([target['id']])
                 self.refresh_images();self.mark_dirty(background=True)
-        self.task.retry_operation=None
         self.task=None;self.preparing_id=None
         if self.last_error and outcome=='complete':outcome='failed'
-        self.progress_presentation.finish(title,outcome)
-        self.task_kind=None;self.task_title='';self.task_stage='';self.progress_image_order=None
-        self.progress_presentation.restore_text()
+        token=self.progress_presentation.token
         if on_finished:
-            try:on_finished()
+            try:
+                if on_finished() is False and outcome=='complete':outcome='failed'
             except Exception:
                 message=traceback.format_exc()
                 if self.task is None:
-                    self.error(message);self.progress_presentation.finish(title,'failed')
+                    self.error(message);outcome='failed'
                 else:self.log_message(message)
         # A completion hook may start another task. Its state now owns the UI.
         if self.task is not None:return
+        # A hook can start and finish another progress operation synchronously.
+        # Never finish a newer operation using the previous task's result.
+        if self.progress_presentation.token!=token:return
+        self.progress_presentation.finish(title,outcome)
+        self.task_kind=None;self.task_title='';self.task_stage='';self.progress_image_order=None
+        self.progress_presentation.restore_text()
         pending=self.pending_prefetch_work;self.pending_prefetch_work=None
         if pending and not self.closing and pending[0]==self.annotation_context():
             pending[1]()
             if self.task is not None:return
-        retry=getattr(self,'pending_task_retry',None);self.pending_task_retry=None
-        if retry and not self.closing:
-            QTimer.singleShot(0,self,retry);self.update_controls();return
         # Hand the queue directly to the next image before exposing idle controls.
         # Cached images can finish quickly; an idle/active pulse per file makes
         # both sidebars, feedback overlays and the list flash repeatedly.
@@ -216,7 +197,7 @@ class TaskWorkflow:
             text=ui_text('tasks.cancel.010') if self.task_kind=='preparation' else ui_text('tasks.cancel.011')
             if not self.progress_presentation.request_cancel(text):return
             if self.task_kind=='preparation':self.preparation.paused=True
-            self.task.cancel();self.task_text.setText(visible_detail(self.task_title,text,self.task_kind));self.update_controls()
+            self.task.cancel();self.task_text.setText(task_message(self.task_title,text,self.task_kind,count=self.progress_count_text));self.update_controls()
         elif self.loading_task:
             self.loading_task.cancel()
             self.progress_presentation.request_cancel('正在停止加载…')

@@ -28,13 +28,14 @@ class SamBackend:
     def __init__(self):
         self.model=None;self.config=None;self.signature=None;self.predictor=None;self.cache_key=None
 
-    def load(self, config):
-        from segment_anything import sam_model_registry,SamPredictor
+    def load(self, config, on_load=None):
         if config.get('backend','sam')!='sam':raise ValueError('SAM 1 适配器不能加载其他代际，请选择匹配的模型后端。')
         path=Path(config['checkpoint'])
         if not path.is_file():raise FileNotFoundError('权重文件不可访问，请重试自动下载。')
         stamp=(str(path.resolve()),path.stat().st_size,path.stat().st_mtime_ns,config['variant'],config['device'])
         if stamp==self.signature:return
+        if on_load:on_load()
+        from segment_anything import sam_model_registry,SamPredictor
         device=config['device']
         if device=='cuda' and not torch.cuda.is_available():device='cpu'
         torch.set_num_threads(min(8,os.cpu_count() or 4))

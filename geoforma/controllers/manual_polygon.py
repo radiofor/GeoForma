@@ -41,7 +41,7 @@ class ManualPolygonWorkflow:
             self.statusBar().showMessage('请至少绘制三个不同的顶点。',4000);return
         polygon=Polygon(points)
         if polygon.is_empty or not polygon.is_valid or polygon.area<=0:
-            self.statusBar().showMessage('多边形无效，请撤回顶点并避免边界交叉。',5000);return
+            self.statusBar().report_error('多边形无效，请撤回顶点并避免边界交叉。',source='manual_polygon');return
         from ..pixel_geometry import pixel_contour
         image={key:self.image[key] for key in ('width','height')};source=mapping(polygon)
         single=self.single_polygon.isChecked();context=self.annotation_context();vertices=copy.deepcopy(points);draft=self.draft
@@ -67,11 +67,12 @@ class ManualPolygonWorkflow:
             def done(result):
                 geometry,error=result
                 if not current():return
-                if error:self.task_outcome='failed';self.statusBar().showMessage(error,5000)
+                if error:self.task_outcome='failed';self.log_message(error);self.statusBar().report_error('生成多边形失败：'+error,source='manual_polygon')
                 else:publish(geometry)
             self.run('生成多边形',work,done,kind='manual_polygon',deferred_valid=current);return
         try:publish(convert())
-        except ValueError as error:self.statusBar().showMessage(str(error),5000)
+        except ValueError as error:
+            self.log_message(str(error));self.statusBar().report_error('生成多边形失败：'+str(error),source='manual_polygon')
 
     def commit_manual_polygon(self,geometry):
         self.draft={'geometry':geometry,'points':[],'box':None,'pending':False,
@@ -79,7 +80,6 @@ class ManualPolygonWorkflow:
                     'manual_edits':[{'tool':'draw_polygon','at':datetime.now().isoformat()}]}
         self.prompt_undo=[{'_draft':{}}];self.prompt_redo=[];self.view.clear_reshape()
         self.update_draft_info();self.refresh_labels();self.update_controls();self.mark_dirty()
-        self.statusBar().showMessage('多边形已绘制，可选择类别并保存标签。',4000)
 
     def sync_manual_polygon(self):
         points=self.draft.get('manual_vertices')

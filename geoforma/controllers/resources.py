@@ -38,7 +38,8 @@ class ResourceWorkflow:
         from PySide6.QtGui import QDesktopServices
         from ..domain import data_dir
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(data_dir()))):
-            self.statusBar().showMessage('无法打开数据目录，请检查目录权限或使用文件管理器访问。',7000)
+            self.log_message('无法打开数据目录：'+str(data_dir()))
+            self.statusBar().report_error('无法打开数据目录，请检查目录权限或使用文件管理器访问。',source='open_data')
 
     def ensure_model_resources(self):
         from ..resource_migration import pending_migration

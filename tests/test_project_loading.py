@@ -132,7 +132,7 @@ def test_named_loading_progress_remains_live_outside_snapshot_and_keeps_result(w
     try:
         assert w.request_project_open(path,recover_latest=recovering)
         deadline=time.monotonic()+3
-        while w.progress_count.text()!='轮廓 256 / 512':
+        while w.progress_count_text!='轮廓 256 / 512':
             app.processEvents();QTest.qWait(2);assert time.monotonic()<deadline
         assert w.project is old and w.state_label.text()==name
         assert w.progress.maximum()==512 and w.progress.value()==256
@@ -169,7 +169,7 @@ def test_cancel_project_loading_preserves_current_work_and_never_commits(workben
     else:QTest.keyClick(w.project_transition,Qt.Key.Key_Escape)
     wait_loading(w,app)
     assert w.project is old and w.draft=={'points':[[4,5,1]]} and not errors
-    assert w.progress.phase=='cancelled' and w.progress_result.text()=='已取消'
+    assert w.progress.phase=='cancelled' and '已取消' in w.statusBar().currentMessage()
     assert w.progress.isVisible() and not w.progress_presentation.loading_active
 
 
@@ -178,7 +178,7 @@ def test_project_load_failure_keeps_named_failed_result(workbench,saved_project,
     assert w.request_project_open(path,recover_latest=True);wait_loading(w,app)
     assert errors and w.project is old
     assert w.state_label.text()=='恢复工作' and w.progress.phase=='failed'
-    assert w.progress_result.text()=='失败' and path.name in w.progress_panel.toolTip()
+    assert path.name in w.progress_panel.toolTip()
 
 
 def test_completed_project_progress_yields_to_next_model_task(workbench,saved_project):
@@ -303,4 +303,5 @@ def test_close_cancels_background_open_without_replacing_work(workbench,saved_pr
 def test_invalid_navigation_rejected_before_live_state_changes(workbench,saved_project,navigation):
     w,app,wait,errors=workbench;path,source=saved_project;original=w.project
     source['workspace']['navigation']=navigation;save_project(source,path)
-    assert not w.open_project(path) and w.project is original and errors
+    assert not w.open_project(path) and w.project is original
+    assert '打开项目失败' in w.statusBar()._error_toast.label.text()

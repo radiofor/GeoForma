@@ -31,7 +31,14 @@ def task_name(kind):
 
 def progress_name(kind,stage=''):
     """Name the work represented by the adjacent meter, including model stages."""
-    if kind in ('preparation','interactive'):return task_name(kind)
+    if kind=='preparation':
+        clean=_plain(stage)
+        if clean=='检查完整影像缓存':return '检查影像缓存'
+        if clean=='检查影像引用与模型':return '检查输入'
+        if clean in ('加载 SAM 模型','加载模型','加载模型权重','初始化模型进程'):
+            return _STAGES.get(clean,clean)
+        return '影像预处理'
+    if kind=='interactive':return task_name(kind)
     model_stage=kind in ('model','model_warmup')
     if model_stage and any(word in stage for word in ('下载','官方源','续传')):return '下载模型'
     if model_stage and '加载 SAM 模型' in stage:return '加载模型'
@@ -109,3 +116,9 @@ def visible_detail(title,stage='',kind=None,model=None):
     if detail==badge:return ''
     if detail.startswith(badge+' · '):return detail[len(badge)+3:]
     return detail
+
+
+def task_message(title,stage='',kind=None,model=None,count=''):
+    """Object and counts accompany the action shown beside the progress bar."""
+    detail=visible_detail(title,stage,kind,model)
+    return ' · '.join(value for value in (detail,count) if value)

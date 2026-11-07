@@ -16,6 +16,20 @@ from ..project_files import RECOVERY_NAME,SAVE_FILTER,OPEN_FILTER,new_project_pa
 
 
 class ProjectWorkflow:
+    def report_autosave_problem(self,key,message,*,force=False):
+        problems=getattr(self,'_autosave_problems',None)
+        if problems is None:self._autosave_problems=problems={}
+        if not force and problems.get(key)==message:return
+        if force:self.statusBar().reset_error_source(key)
+        problems[key]=message;self.statusBar().report_error(message,source=key)
+
+    def clear_autosave_problem(self,key):
+        getattr(self,'_autosave_problems',{}).pop(key,None)
+        self.statusBar().clear_error_source(key)
+
+    def clear_autosave_problems(self):
+        for key in list(getattr(self,'_autosave_problems',{})):self.clear_autosave_problem(key)
+
     def previous_work(self):
         from ..recovery import recovery_target
         from ..resource_location import current_resource_dir
@@ -45,9 +59,9 @@ class ProjectWorkflow:
         if not self.project_path:return
         directory=self.project_path.parent
         if not directory.is_dir():
-            QMessageBox.warning(self,'项目目录不可用','项目所在文件夹不存在或不可访问。若项目已移动，请从新位置重新打开项目。')
+            self.statusBar().report_error('项目所在文件夹不存在或不可访问。若项目已移动，请从新位置重新打开项目。')
         elif not QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory.resolve()))):
-            QMessageBox.warning(self,'无法打开项目目录','无法打开项目所在文件夹，请检查系统文件管理器设置。')
+            self.statusBar().report_error('无法打开项目所在文件夹，请检查系统文件管理器设置。')
 
     def capture_workspace(self):
         draft={k:copy.deepcopy(v) for k,v in self.draft.items() if k not in ('logits','choices')}
@@ -76,10 +90,11 @@ class ProjectWorkflow:
         except (OSError,ValueError,RuntimeError):pending=True
         if pending or getattr(getattr(self,'resource_dialog',None),'migration_active',False):
             self.log_message('资源迁移未完成，自动保存暂不可用。请先继续迁移。')
-            self.statusBar().showMessage('资源迁移未完成，自动保存暂不可用。请先继续迁移。',10000)
-            if self.closing:
-                self.abort_shutdown();QMessageBox.warning(self,'自动保存未完成','请先完成资源迁移，再关闭 GeoForma。')
+            closing=self.closing
+            if closing:self.abort_shutdown()
+            self.report_autosave_problem(('autosave',self.project_epoch,'migration'),'资源迁移未完成，自动保存暂不可用。请先继续迁移。',force=closing)
             return False
+        self.clear_autosave_problem(('autosave',self.project_epoch,'migration'))
         # Opening and closing a blank workspace must preserve previous work.
         self.project_saves.retry_failed()
         if self.dirty and (self.project_path or self.project['images'] or self.project.get('references')):
@@ -90,10 +105,11 @@ class ProjectWorkflow:
             except (OSError,ValueError,RuntimeError):path=None
             if path is None:
                 self.log_message(ui_text('projects.autosave_unavailable'))
-                self.statusBar().showMessage(ui_text('projects.autosave_unavailable'),10000)
-                if self.closing:
-                    self.abort_shutdown();QMessageBox.warning(self,ui_text('projects.failed.007'),ui_text('projects.failed.008'))
+                closing=self.closing
+                if closing:self.abort_shutdown()
+                self.report_autosave_problem(('autosave',self.project_epoch,'unavailable'),ui_text('projects.autosave_unavailable'),force=closing)
                 return False
+            self.clear_autosave_problem(('autosave',self.project_epoch,'unavailable'))
             request=ProjectSaveRequest(project_snapshot(self.project),path,self.project_path,self.project_epoch,self.dirty_revision,self.project_title.text(),self.project_saves.next_order())
             # Capture before returning even while another project is writing.
             # Switching projects must not discard its latest pending edits.
@@ -123,6 +139,7 @@ class ProjectWorkflow:
         task=Task(save_snapshot);self.autosave_task=task
         def saved(_):
             self.project_saves.saved(request.destination,request.order)
+            self.clear_autosave_problem(('autosave',request.epoch,'failed',request.key))
             if request.epoch==self.project_epoch and self.project_path==original_path:
                 self.settings.setValue('recovery/last_work',str(original_path or path))
                 if request.revision==self.dirty_revision:
@@ -138,10 +155,11 @@ class ProjectWorkflow:
             if self.project_saves.stale(request):return
             self.project_saves.defer(request)
             self.log_message(ui_text('projects.failed.006')+message)
-            self.statusBar().showMessage(ui_text('projects.autosave_error'),10000)
-            if self.closing:
-                self.abort_shutdown()
-                QMessageBox.warning(self,ui_text('projects.failed.007'),ui_text('projects.failed.008'))
+            from ..error_messages import user_message
+            closing=self.closing
+            if closing:self.abort_shutdown()
+            if request.epoch==self.project_epoch and self.project_path==original_path:
+                self.report_autosave_problem(('autosave',request.epoch,'failed',request.key),'自动保存失败：'+user_message(message),force=closing)
         task.signals.result.connect(saved);task.signals.error.connect(failed);task.signals.finished.connect(finished);self.storage_pool.start(task)
 
     def save(self):
@@ -167,15 +185,20 @@ class ProjectWorkflow:
                 # workspace; no later edit can occur while this method blocks.
                 for queue in (self.project_saves.pending,self.project_saves.failed):
                     for key,request in list(queue.items()):
-                        if request.epoch==self.project_epoch and request.project_path is None:queue.pop(key,None)
+                        if request.epoch==self.project_epoch and request.project_path is None:
+                            queue.pop(key,None)
+                            self.clear_autosave_problem(('autosave',request.epoch,'failed',request.key))
                 try:
                     from ..recovery import discard_saved_untitled
                     from ..resource_location import current_resource_dir
                     discard_saved_untitled(current_resource_dir(),self.project.get('cache_id'))
                 except (OSError,ValueError,RuntimeError):
                     self.log_message('项目已保存，但未能清理未命名项目的恢复记录。')
+            self.clear_autosave_problem(('autosave',self.project_epoch,'unavailable'))
             self.project_path=path;self.dirty=False;self.refresh_project_title();self.log_message(ui_text('projects.save.009')+str(path));self.settings.setValue('recovery/last_work',str(path));self.update_controls()
-        except Exception:self.error(traceback.format_exc())
+        except Exception as error:
+            from ..error_messages import user_message
+            self.log_message(traceback.format_exc());self.statusBar().report_error('项目保存失败：'+user_message(error))
 
     def new(self):
         if not can_start_operation(self):return
@@ -183,6 +206,7 @@ class ProjectWorkflow:
         if self.label_index_task:self.label_index_task.cancel()
         if self.autosave() is False:return
         self.interrupt_reshape()
+        self.clear_autosave_problems()
         self.smoother.clear();self.project_epoch+=1;self.preparation.reset();self.image_sessions.clear();self.project=new_project(last_model(self.settings));self.project_path=None;self.image=None;self.draft={};self.label_undo=[];self.label_redo=[];self.prompt_undo=[];self.prompt_redo=[];self.selected_id=None;self.selected_ids.clear();self.selected_points.clear();self.render_generation+=1;self.raster_renderer.reset(self.render_generation,clear_cache=True);self.view.set_image(0,0);self.refresh_classes();self.refresh_images();self.refresh_labels();self.update_draft_info();self.update_controls();self.refresh_project_title();self.dirty=False
         self.mode_histories.clear();self.auto_apply.setChecked(True)
         self.single_polygon.setChecked(self.project['workspace']['single_polygon'])
@@ -206,7 +230,7 @@ class ProjectWorkflow:
         try:pending=bool(pending_migration())
         except (OSError,ValueError,RuntimeError):pending=True
         if pending:
-            self.statusBar().showMessage('请先完成资源迁移，再打开项目。',6000);return False
+            self.statusBar().report_error('请先完成资源迁移，再打开项目。');return False
         if _loaded is None and not can_start_operation(self):return False
         try:
             from ..project_loading import prepare_project
@@ -233,5 +257,6 @@ class ProjectWorkflow:
                 _loaded.reconciled_caches=reconcile_prepared(_loaded.project,cache_root,self.service.cache_revision)
             self.interrupt_reshape()
             return self.commit_project(_loaded,path)
-        except Exception:
-            self.restoring_project=False;self.error(traceback.format_exc());return False
+        except Exception as error:
+            from ..error_messages import user_message
+            self.restoring_project=False;self.log_message(traceback.format_exc());self.statusBar().report_error('打开项目失败：'+user_message(error));return False

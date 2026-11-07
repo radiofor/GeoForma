@@ -111,7 +111,7 @@ def test_each_mode_uses_compact_stable_height(workbench):
     assert not hasattr(w,'reshape_info')
     message='重塑失败'
     w.reshape_error(w.reshape_session,message);w.update_controls();settle(app)
-    assert w.statusBar().currentMessage()==message
+    assert message in w.statusBar()._error_toast.label.text()
     assert rectangles(w)==reshaping
     w.statusBar().clearMessage();settle(app)
     w.cancel_reshape();settle(app)
@@ -124,7 +124,7 @@ def test_transient_notifications_do_not_hide_or_resize_status_items(workbench):
     bar=w.statusBar();before=rectangles(w);slot=bar.text_slot.geometry()
     bar.showMessage('提示说明'*100,30);settle(app)
     assert bar.currentMessage()=='提示说明'*100
-    assert bar.notice.toolTip()==bar.currentMessage() and w.state_label.isVisible()
+    assert bar.notice.toolTip()==bar.currentMessage() and not w.state_label.isVisible()
     assert bar.text_slot.width()==slot.width() and bar.height()>=42
     assert w.image_scroll.width()==before['image_scroll'][1][0]
     QTest.qWait(50);settle(app)

@@ -11,6 +11,28 @@ def until(app,predicate):
         app.processEvents();QTest.qWait(2);assert time.monotonic()<deadline
 
 
+def test_raster_read_displays_one_direct_message_and_clears_on_finish(workbench):
+    w,app,wait,errors=workbench;release=threading.Event()
+    im=fake_image('one','lake.tif');im['display_recipe']={'bands':[1,2,3],'ranges':[[0,255]]*3}
+    w.image=im;w.project['images']=[im];w.background_activity.delay=0
+    def reader(*args):
+        assert release.wait(5)
+        return np.zeros((4,4,3),dtype=np.uint8),np.ones((4,4),dtype=bool)
+    w.raster_renderer.reader=reader
+    try:
+        w.raster_renderer.request(im,w.render_generation,[0,0,2000,2000],1400,True)
+        until(app,lambda:bool(w.statusBar()._background))
+        bar=w.statusBar()
+        assert bar.text_slot.currentWidget() is bar.background
+        assert bar.background.text()=='加载主影像 · lake.tif' and not w.background_button.isVisible()
+        assert w.progress_panel.isVisible() and not w.progress.isVisible()
+        bar.showMessage('需要处理的提示');assert bar.text_slot.currentWidget() is bar.notice
+        bar.clearMessage();assert bar.text_slot.currentWidget() is bar.background
+    finally:release.set()
+    wait();app.processEvents()
+    assert not w.statusBar()._background and w.statusBar().text_slot.currentWidget() is w.context_status and w.progress_panel.isVisible() and not errors
+
+
 def test_actual_raster_and_model_workers_keep_separate_status_and_cancel(workbench):
     w,app,wait,errors=workbench;model_done=threading.Event();raster_done=threading.Event()
     im=fake_image('one','lake.tif');im['display_recipe']={'bands':[1,2,3],'ranges':[[0,255]]*3}
@@ -28,14 +50,16 @@ def test_actual_raster_and_model_workers_keep_separate_status_and_cancel(workben
         raster_task=w.raster_renderer.task
         until(app,lambda:'raster' in w.background_activity.visible and w.task_stage=='加载模型权重…')
         assert w.state_label.text()=='加载模型'
-        assert '显示主影像' in w.background_button.toolTip() and 'lake.tif' in w.background_button.toolTip()
+        assert '加载主影像' in w.background_button.toolTip() and 'lake.tif' in w.background_button.toolTip()
+        assert not w.background_button.isVisible()
         w.statusBar().showMessage('工作已自动保存',2000)
         assert w.statusBar().text_slot.currentIndex()==0 and '读取模型权重' in w.task_text.text()
         w.cancel();assert w.task.cancel_event.is_set() and not raster_task.cancel_event.is_set()
         model_done.set();until(app,lambda:w.task is None)
+        assert not w.background_button.isVisible()
         assert w.state_label.text()=='加载模型' and 'SAM' in w.task_text.text()
         assert not w.task_text.text().startswith('显示主影像')
-        assert not w.cancel_button.isVisible() and w.progress.isVisible()
+        assert not w.cancel_button.isVisible() and w.progress_panel.isVisible() and not w.progress.isVisible()
         assert w.progress.phase=='cancelled'
     finally:model_done.set();raster_done.set()
     wait()

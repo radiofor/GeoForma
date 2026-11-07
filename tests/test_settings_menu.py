@@ -43,7 +43,7 @@ def test_settings_actions_keep_data_directory_and_logs_separate(workbench,monkey
     w.task_log_action.trigger();assert w.log_dock.isVisible()
     w.task_log_action.trigger();assert not w.log_dock.isVisible()
     monkeypatch.setattr(QDesktopServices,'openUrl',lambda url:False)
-    w.data_directory_action.trigger();assert '无法打开数据目录' in w.statusBar().currentMessage() and not errors
+    w.data_directory_action.trigger();assert '无法打开数据目录' in w.statusBar()._error_toast.label.text() and not errors
 
 
 @pytest.mark.parametrize('lightweight',[False,True])

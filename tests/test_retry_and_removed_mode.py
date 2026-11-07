@@ -1,42 +1,45 @@
 from types import MethodType
 import pytest
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtTest import QTest
 from geoforma.controllers.tasks import TaskWorkflow
 from geoforma.inference.client import ModelService
 from geoforma.inference.engine import ModelEngine
 from test_workbench import workbench,fake_image
 
 
-def test_retry_repeats_failed_model_operation(workbench,monkeypatch):
-    w,app,wait,errors=workbench;attempts=[];results=[];dialogs=[]
+def test_user_can_retry_failed_model_operation_without_modal_dialog(workbench,monkeypatch):
+    from geoforma.controllers import models
+    w,app,wait,errors=workbench;attempts=[]
     w.error=MethodType(TaskWorkflow.error,w)
     w.service.activate_project=lambda *a:False
-    def dialog(box,value=None,owner=None):
-        dialogs.append(box)
-        assert box.button(QMessageBox.StandardButton.Retry).text()=='重试'
-        box.button(QMessageBox.StandardButton.Retry).click()
-        return True,value(box)
-    monkeypatch.setattr('geoforma.controllers.tasks.dialog_result',dialog)
-    def operation(task):
+    monkeypatch.setattr(w,'ensure_model_resources',lambda:True)
+    monkeypatch.setattr(models,'ModelDialog',lambda *args:None)
+    monkeypatch.setattr(models,'dialog_result',lambda *args:(True,dict(w.project['model'])))
+    w.image=fake_image('one');w.project['images']=[w.image]
+    def operation(config,task):
         attempts.append(task)
         if len(attempts)==1:raise OSError('download timed out')
-        return 'ready'
-    assert w.run('加载模型',operation,results.append,kind='model')
-    wait()
+        return {'checkpoint':config['checkpoint'],'device':'cpu','execution':'native'}
+    w.service.prepare_model=operation
+    w.configure_model();wait()
+    assert len(attempts)==1 and w.progress.phase=='failed'
+    assert w.statusBar()._error_toast.label.isVisible() and '模型加载失败' in w.statusBar()._error_toast.label.text()
+    w.configure_model();wait()
     assert len(attempts)==2 and attempts[0] is not attempts[1]
-    assert results==['ready'] and len(dialogs)==1 and not w.last_error
+    assert w.progress.phase=='complete' and not w.last_error
 
 
-def test_retry_ignores_a_replaced_project(workbench,monkeypatch):
+def test_replaced_project_does_not_trigger_automatic_retry(workbench,monkeypatch):
     w,app,wait,errors=workbench;attempts=[]
     w.error=MethodType(TaskWorkflow.error,w);w.service.activate_project=lambda *a:False
-    def dialog(box,value=None,owner=None):
-        w.project_epoch+=1;box.button(QMessageBox.StandardButton.Retry).click()
-        return True,value(box)
-    monkeypatch.setattr('geoforma.controllers.tasks.dialog_result',dialog)
+    monkeypatch.setattr(w,'ensure_model_resources',lambda:True)
     def operation(task):attempts.append(task);raise OSError('download timed out')
     w.run('加载模型',operation,lambda _:None,kind='model');wait()
-    assert len(attempts)==1
+    assert len(attempts)==1 and w.progress.phase=='failed'
+    assert w.statusBar()._error_toast.label.isVisible()
+    previous_epoch=w.project_epoch;w.new();assert w.project_epoch==previous_epoch+1
+    QTest.qWait(250);app.processEvents()
+    assert len(attempts)==1 and w.task is None
 
 
 def test_whole_image_mode_has_no_entry_or_service_execution(workbench):

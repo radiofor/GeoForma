@@ -12,14 +12,15 @@ class Sam2Backend(SamBackend):
     def __init__(self,family='sam2'):
         super().__init__();self.family=family;self.schema=adapter_schema(family)
 
-    def load(self,config):
-        from sam2.build_sam import build_sam2
-        from sam2.sam2_image_predictor import SAM2ImagePredictor
+    def load(self,config,on_load=None):
         if config.get('backend')!=self.family:raise ValueError('模型代际与适配器不匹配。')
         spec=model_spec(config['variant'],self.family);path=Path(config['checkpoint'])
         if not path.is_file():raise FileNotFoundError('权重文件不可访问，请重试自动下载。')
         stamp=(str(path.resolve()),path.stat().st_size,path.stat().st_mtime_ns,self.family,config['variant'],config['device'])
         if stamp==self.signature:return
+        if on_load:on_load()
+        from sam2.build_sam import build_sam2
+        from sam2.sam2_image_predictor import SAM2ImagePredictor
         self.close();device=config['device'];fallback=None
         if device=='cuda' and not torch.cuda.is_available():device='cpu'
         torch.set_num_threads(min(8,os.cpu_count() or 4))

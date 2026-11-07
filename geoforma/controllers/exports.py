@@ -61,7 +61,7 @@ class ExportWorkflow:
         if not self.image or self.foreground_task_active():return
         if not self.commit_export_label_field():return
         labels=self.current_labels()
-        if not labels:QMessageBox.information(self,ui_text('exports.export.005'),ui_text('exports.export.006'));return
+        if not labels:self.statusBar().showMessage('当前影像没有可导出的标签。',4000);return
         from ..export_settings import VECTOR_FORMATS,export_path
         suffix=self.export_kind.currentData()
         item=next((entry for entry in VECTOR_FORMATS if entry[1]==suffix),None)
@@ -100,6 +100,6 @@ class ExportWorkflow:
             return result
         def exported(result):
             note=ui_text('exports.exported.009') if Path(result).suffix.lower()=='.shp' else ui_text('exports.exported.012') if Path(result).suffix.lower()=='.geojson' else ''
-            self.log_message(ui_text('exports.exported.013')+result+note);self.statusBar().showMessage(Path(result).suffix[1:].upper()+(' · EPSG:4326' if Path(result).suffix.lower()=='.geojson' else ''),5000)
+            self.log_message(ui_text('exports.exported.013')+result+note);self.statusBar().showMessage('标签已导出 · '+Path(result).name,5000)
         self.run(ui_text('exports.export.004'),work,exported,kind='export')
 

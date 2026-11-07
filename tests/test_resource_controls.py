@@ -116,7 +116,7 @@ def test_only_stop_can_cancel_and_close_waits_for_worker_exit(workbench,checks_c
         dialog.report(90,100,'迟到的进度');assert dialog.phase.text()=='正在停止'
         release.set();wait()
         assert dialog.task is None and dialog.progress.phase=='cancelled'
-        assert dialog.phase.text()=='已停止' and w.progress_result.text()=='已停止'
+        assert dialog.phase.text()=='已停止' and w.progress.phase=='cancelled'
         assert dialog.close_button.isEnabled() and not dialog.stop_button.isEnabled()
         assert not results and not errors
         assert initial==(dialog.size(),dialog.more_button.geometry(),dialog.stop_button.geometry(),dialog.close_button.geometry())

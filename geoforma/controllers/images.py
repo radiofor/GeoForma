@@ -4,7 +4,7 @@ from ..ui.text import ui_text
 import copy
 from pathlib import Path
 from PySide6.QtCore import Qt, QRectF,QSignalBlocker,QTimer
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QInputDialog
+from PySide6.QtWidgets import QFileDialog, QInputDialog
 from ..raster import inspect_source, make_recipe
 from ..dialogs import BandsDialog
 from ..operation_state import can_start_operation
@@ -54,13 +54,13 @@ class ImageWorkflow:
                 self._activate_image(row)
                 if not self.auto_prepare:self.queue_preparation()
             summary=plan.summary(len(images));self.log_message(summary);self.statusBar().showMessage(summary,8000)
-            for error in plan.errors[:200]:self.log_message(error)
             if plan.errors:self.show_import_report(summary,plan.errors)
         self.run(ui_text('images.import_paths.001'),work,done,kind='import')
 
     def show_import_report(self,summary,errors):
-        box=QMessageBox(QMessageBox.Icon.Warning,ui_text('images.done.016'),summary,QMessageBox.StandardButton.Ok,self)
-        box.setDetailedText('\n'.join(errors[:500])+ (f'\n其余 {len(errors)-500} 项未列出。' if len(errors)>500 else ''));dialog_result(box)
+        for error in errors[:500]:self.log_message(error)
+        if len(errors)>500:self.log_message(f'其余 {len(errors)-500} 项未列出。')
+        self.statusBar().report_error(summary,source='import_report')
 
     def refresh_images(self):
         from ..ui.raster_presenter import build_raster_rows
@@ -142,7 +142,7 @@ class ImageWorkflow:
             if valid() and not task.cancel_event.is_set():
                 if retry_changed_target():return
                 from ..error_messages import user_message
-                self.log_message(message);self.statusBar().showMessage('影像读取失败 · '+user_message(message),7000)
+                self.log_message(message);self.statusBar().report_error('读取影像失败：'+user_message(message),source='image_read')
         def finished():
             if getattr(self,'_image_switch_task',None) is task:self._image_switch_task=None
             if self.closing:QTimer.singleShot(0,self.close)
@@ -216,7 +216,7 @@ class ImageWorkflow:
         accepted,value=dialog_result(BandsDialog(self.image,self),lambda dialog:dialog.values())
         if not accepted:return
         bands,ranges,stretch,target=value;im=self.image
-        if stretch==1 and any(hi<=lo for lo,hi in ranges):QMessageBox.warning(self,ui_text('images.configure_bands.014'),ui_text('images.configure_bands.015'));return
+        if stretch==1 and any(hi<=lo for lo,hi in ranges):self.statusBar().report_error(ui_text('images.configure_bands.015'));return
         def work(task):
             if stretch==0:return make_recipe(im,bands)
             from ..raster import mark_recipe_policy

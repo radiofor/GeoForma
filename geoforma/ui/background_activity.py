@@ -25,9 +25,9 @@ class BackgroundActivity(QObject):
         request=self.window.raster_renderer.active_request
         image=request.image;reference=image.get('_reference')
         from ..reference_images import MAIN_IMAGE_LABEL
-        title=('显示 '+reference['group']+' 参考') if reference else '显示'+MAIN_IMAGE_LABEL
+        title=('加载 '+reference['group']+' 参考') if reference else '加载'+MAIN_IMAGE_LABEL
         from pathlib import Path
-        self.set('raster',title,Path(image['path']).name,task)
+        self.set('raster',title,Path((reference or image)['path']).name,task)
 
     def smoothing_changed(self,task):
         self.set('smoothing','平滑标签' if task else '',token=task)
@@ -44,8 +44,12 @@ class BackgroundActivity(QObject):
             self.button.setText(self.button.fontMetrics().elidedText(summary,Qt.TextElideMode.ElideRight,self.button.width()-16))
             self.button.setToolTip('\n'.join(title+('：'+detail if detail else '') for title,detail in signature))
             self.button.setEnabled(bool(records))
-            self.button.setVisible(bool(records))
         primary=w.task is not None or w.progress_presentation.loading_active
+        only_raster=len(records)==1 and 'raster' in self.visible
+        if not primary and 'raster' in self.visible:w.progress_presentation.clear_terminal()
+        self.button.setVisible(bool(records) and not primary and not only_raster)
         w.statusBar().set_task_active(primary)
+        raster=self.visible.get('raster')
+        w.statusBar().set_background_message(' · '.join(raster[:2]) if raster else '')
         # Background work owns only its own button and menu. It must not replace
         # the foreground task's last result or borrow its progress indicator.

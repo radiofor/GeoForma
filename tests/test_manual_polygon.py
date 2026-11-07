@@ -11,6 +11,15 @@ def click_vertex(w,x,y):
     QTest.mouseClick(w.view.viewport(),Qt.MouseButton.LeftButton,pos=w.view.mapFromScene(QPointF(x,y)))
 
 
+def test_drawing_has_no_redundant_instruction_or_completion_notice(workbench,monkeypatch):
+    w,app,_=workbench;w.show();app.processEvents();messages=[]
+    monkeypatch.setattr(w.statusBar(),'showMessage',lambda text,*args:messages.append(text))
+    w.set_tool('draw_polygon')
+    for p in ((40,40),(65,40),(65,65)):w.add_manual_vertex(*p)
+    w.finish_manual_polygon()
+    assert w.draft.get('geometry') and not messages
+
+
 def test_draw_save_and_undo_without_model_preparation(workbench):
     w,app,_=workbench;w.show();app.processEvents();w.image['ready']=False;w.update_controls()
     actions=w.image_toolbar.actions()
@@ -40,7 +49,7 @@ def test_invalid_polygon_can_be_corrected_or_cancelled(workbench):
     for p in ((40,40),(60,60),(40,60),(60,40)):click_vertex(w,*p)
     QTest.mouseClick(w.view.viewport(),Qt.MouseButton.RightButton)
     assert len(w.draft['manual_vertices'])==4 and not w.confirm_button.isEnabled()
-    assert '无效' in w.statusBar().currentMessage()
+    assert '无效' in w.statusBar()._error_toast.label.text()
     QTest.keyClick(w.view.viewport(),Qt.Key.Key_Escape)
     assert not w.draft and not w.view.reshape_items
 

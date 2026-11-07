@@ -20,14 +20,26 @@ def best_choice(choices,points):
     if not choices:return -1
     return min(range(len(choices)),key=lambda i:(prompt_misses(choices[i]['geometry'],points),-choices[i]['score']))
 
-def preparation_signature(image,model):
+def _preparation_checkpoint_stamp(model):
+    import stat
     path=Path(model['checkpoint'])
-    stamp=[str(path.resolve()),path.stat().st_size,path.stat().st_mtime_ns] if path.is_file() else [str(path),None,None]
+    try:info=path.stat()
+    except OSError:return [str(path),None,None]
+    return [str(path.resolve()),info.st_size,info.st_mtime_ns] if stat.S_ISREG(info.st_mode) else [str(path),None,None]
+
+def preparation_signature(image,model,*,_stamp=None):
+    stamp=_preparation_checkpoint_stamp(model) if _stamp is None else _stamp
     return digest({'schema':'full_preparation_v1','source':image.get('fingerprint'),'grid':[image['width'],image['height'],image.get('transform')],
         'recipe':image.get('model_recipe'),'backend':model.get('backend','sam'),'variant':model['variant'],'weights':stamp})
 
 def fully_prepared(image,model):
     return bool(image.get('ready') and image.get('prepared_full_signature')==preparation_signature(image,model))
+
+def all_fully_prepared(images,model):
+    """Check a project using one consistent snapshot of its model weights."""
+    if not images or not all(image.get('ready') for image in images):return False
+    stamp=_preparation_checkpoint_stamp(model)
+    return all(image.get('prepared_full_signature')==preparation_signature(image,model,_stamp=stamp) for image in images)
 
 
 def preparation_window(images,current):

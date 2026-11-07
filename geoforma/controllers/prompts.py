@@ -39,7 +39,6 @@ class PromptWorkflow:
         if leaving:self.leave_reshape()
         if mode!='reshape':self.view.reshape_picking=False
         self.activate_tool(mode)
-        if mode=='draw_polygon':self.statusBar().showMessage('左键添加顶点，右键完成；Backspace 撤回，Esc 取消。',6000)
         if leaving:self.refresh_labels();self.mark_dirty()
         self.update_controls()
 

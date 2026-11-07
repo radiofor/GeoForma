@@ -1,6 +1,5 @@
 """Responsive exit: workers finish before the model process is released."""
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QMessageBox
 from ..tasks import Task
 from ..ui.text import ui_text
 
@@ -26,7 +25,6 @@ class ShutdownWorkflow:
         if self.autosave() is False:
             if not was_closing:
                 self.abort_shutdown()
-                QMessageBox.warning(self,ui_text('projects.failed.007'),ui_text('projects.failed.008'))
             event.ignore();return
         pending=bool(self.task or self.render_task or self.label_index_task or self.autosave_task or self.smoother.task or self.loading_task or self.housekeeping_task)
         pools=(self.pool,self.render_pool,self.label_index_pool,self.storage_pool,self.smoother.pool,self.load_pool,self.housekeeping_pool)
@@ -43,7 +41,7 @@ class ShutdownWorkflow:
         task.signals.result.connect(lambda _:setattr(self,'shutdown_ready',True))
         def failed(message):
             self.log_message(message);self.abort_shutdown()
-            QMessageBox.warning(self,ui_text('shutdown.title'),ui_text('shutdown.failed'))
+            self.statusBar().report_error(ui_text('shutdown.failed'))
         def finished():
             self.shutdown_task=None
             if getattr(self,'shutdown_ready',False):self.finish_shutdown()

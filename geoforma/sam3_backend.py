@@ -15,16 +15,17 @@ class Sam3Backend(Sam2Backend):
         SamBackend.__init__(self)
         self.schema=adapter_schema(self.family);self.image_model=None;self.processor=None
 
-    def load(self,config):
-        from .sam3_runtime import activate
-        activate()
-        from sam3.model_builder import build_sam3_image_model
-        from sam3.model.sam3_image_processor import Sam3Processor
+    def load(self,config,on_load=None):
         if config.get('backend')!=self.family:raise ValueError('SAM 3 适配器与模型代际不匹配。')
         spec=model_spec(config['variant'],self.family);path=Path(config['checkpoint'])
         if not path.is_file():raise FileNotFoundError('SAM 3 权重文件不可访问，请重试下载。')
         stamp=(str(path.resolve()),path.stat().st_size,path.stat().st_mtime_ns,config['device'])
         if stamp==self.signature:return
+        if on_load:on_load()
+        from .sam3_runtime import activate
+        activate()
+        from sam3.model_builder import build_sam3_image_model
+        from sam3.model.sam3_image_processor import Sam3Processor
         with path.open('rb') as stream:sha=hashlib.file_digest(stream,'sha256').hexdigest()
         if path.name==spec['file'] and sha!=spec['sha256']:raise ValueError('SAM 3 权重校验失败，请重新下载指定镜像文件。')
         self.close();device=config['device'];fallback=None

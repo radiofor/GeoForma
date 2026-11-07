@@ -62,7 +62,7 @@ class LabelListWorkflow:
                 if context==self.annotation_context() and key==self.label_index_signature():
                     if not self.label_index_key or self.label_index_key[0]!=key[0]:self.label_index=LabelIndex([])
                     self.label_index_key=key
-                    self.statusBar().showMessage('轮廓显示失败，标签记录保留。详细信息见任务记录。',7000)
+                    self.statusBar().report_error('轮廓显示失败，标签记录保留。详细信息见任务记录。',source='label_display')
             def finished():
                 if self.label_index_task is task:self.label_index_task=None
                 self.background_activity.set('labels','')

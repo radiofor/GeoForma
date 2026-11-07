@@ -1,6 +1,6 @@
 """Incremental graphics layers; no annotation state or model inference."""
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QImage, QPixmap, QPainterPath, QPainterPathStroker, QPen, QColor, QTransform
+from PySide6.QtGui import QImage, QPixmap, QPainter, QPainterPath, QPainterPathStroker, QPen, QColor, QTransform
 from PySide6.QtWidgets import QGraphicsPathItem, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsPixmapItem
 from collections import OrderedDict
 from .label_item import LabelItem, LABEL_RED
@@ -30,7 +30,14 @@ class BoundedPreviewItem(QGraphicsPixmapItem):
         painter.restore()
 
 
-class RasterOverviewItem(QGraphicsPixmapItem):
+class RasterLayerItem(QGraphicsPixmapItem):
+    """Raster pixels are not interactive; avoid constructing alpha-mask shapes."""
+    def __init__(self,pixmap):
+        super().__init__(pixmap)
+        self.setShapeMode(QGraphicsPixmapItem.ShapeMode.BoundingRectShape)
+
+
+class RasterOverviewItem(RasterLayerItem):
     """Leave the detail window transparent instead of showing stale overview pixels."""
     excluded=None
 
@@ -39,7 +46,16 @@ class RasterOverviewItem(QGraphicsPixmapItem):
             super().paint(painter,option,widget);return
         path=QPainterPath();path.setFillRule(Qt.FillRule.OddEvenFill)
         path.addRect(self.boundingRect());path.addRect(self.excluded)
-        painter.save();painter.setClipPath(path,Qt.ClipOperation.IntersectClip)
+        # Antialiased clip edges and pixmap edges leave a translucent seam
+        # between the two layers under fractional viewport transforms.
+        painter.save();painter.setRenderHint(QPainter.RenderHint.Antialiasing,False);painter.setClipPath(path,Qt.ClipOperation.IntersectClip)
+        super().paint(painter,option,widget);painter.restore()
+
+
+class RasterDetailItem(RasterLayerItem):
+    """Paint raster edges without antialiasing while retaining smooth sampling."""
+    def paint(self,painter,option,widget=None):
+        painter.save();painter.setRenderHint(QPainter.RenderHint.Antialiasing,False)
         super().paint(painter,option,widget);painter.restore()
 
 
@@ -108,7 +124,8 @@ class SceneLayers:
         if current:current.setPixmap(pixmap);item=current
         elif overview:
             item=RasterOverviewItem(pixmap);self.scene().addItem(item)
-        else:item=self.scene().addPixmap(pixmap)
+        else:
+            item=RasterDetailItem(pixmap);self.scene().addItem(item)
         item.setPos(window[0],window[1]);item.setTransform(QTransform.fromScale(window[2]/w,window[3]/h));item.setZValue(0 if overview else 1)
         item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
         if overview:self.base_item=item

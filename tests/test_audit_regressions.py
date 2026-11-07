@@ -48,8 +48,12 @@ def test_invalid_project_is_rejected_without_changing_workspace(workbench,damage
         project['history']={'schema':1,'labels':{'individual':{'undo':[[['target',old,0]]],'redo':[]}}}
     path=tmp/'bad.gfm';path.write_text(json.dumps(project),encoding='utf-8')
     with pytest.raises(ValueError):load_project(path)
-    original=w.project;sessions=copy.deepcopy(w.image_sessions);errors=[];w.error=errors.append;w.open_project(path)
-    assert errors and w.project is original and w.image_sessions==sessions
+    original=w.project;sessions=copy.deepcopy(w.image_sessions);before=path.read_bytes()
+    w.show();app.processEvents()
+    assert not w.open_project(path)
+    toast=w.statusBar()._error_toast
+    assert toast.label.isVisible() and '打开项目失败' in toast.label.text()
+    assert w.project is original and w.image_sessions==sessions and path.read_bytes()==before
 
 
 def test_adjacent_label_is_not_eroded_by_occupied_mask():

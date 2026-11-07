@@ -138,8 +138,6 @@ class StatusDetail(ElidedLabel):
     def paintEvent(self,event):
         if not self.text() or self.width()<32:return
         painter=QPainter(self);painter.setRenderHint(QPainter.RenderHint.Antialiasing);painter.setFont(self.font())
-        painter.setPen(QPen(QColor('#deeaed'),1));painter.setBrush(QColor('#edf6f5' if self.notice else '#f0f5f7'))
-        painter.drawRoundedRect(QRectF(self.rect()).adjusted(.5,1,-.5,-1),6,6)
         is_file=any(suffix in self.text().lower() for suffix in ('.tif','.vrt','.geojson','.shp','.json'))
         symbol(painter,QRectF(8,(self.height()-13)/2,13,13),'file' if is_file else 'info','#43838a')
         if self.wrap:
